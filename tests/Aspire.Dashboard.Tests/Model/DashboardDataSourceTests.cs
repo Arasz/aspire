@@ -118,7 +118,35 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
 
         Assert.Equal(DashboardRunStore.SchemaVersion, metadata.RootElement.GetProperty("SchemaVersion").GetInt32());
-        Assert.Equal(DashboardRunStore.SchemaVersion, Assert.Single(runStore.GetRuns()).SchemaVersion);
+        Assert.Equal(DashboardRunStore.SchemaVersion, Assert.Single(runStore.GetRuns().Values).SchemaVersion);
+    }
+
+    [Fact]
+    public async Task CurrentRun_PinPersistsWhenRunBecomesHistorical()
+    {
+        using var workspace = TemporaryWorkspace.Create(testOutputHelper);
+        var options = CreateOptions(workspace);
+        var startedAt = new DateTimeOffset(2026, 7, 29, 12, 0, 0, TimeSpan.Zero);
+        string pinnedRunId;
+
+        using (var currentRunStore = CreateRunStore(options, new FixedTimeProvider(startedAt)))
+        {
+            await InitializeAndPublishRunAsync(currentRunStore);
+            var currentRun = Assert.Single(currentRunStore.GetRuns().Values);
+            Assert.False(currentRun.IsPinned);
+
+            currentRunStore.SetRunPinned(currentRun, isPinned: true);
+
+            Assert.True(currentRun.IsPinned);
+            using var metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(currentRunStore.RunDirectory, "run.json")));
+            Assert.True(metadata.RootElement.GetProperty("IsPinned").GetBoolean());
+            pinnedRunId = currentRun.RunId;
+        }
+
+        using var nextRunStore = CreateRunStore(options, new FixedTimeProvider(startedAt.AddMinutes(1)));
+        var historicalRun = nextRunStore.GetRuns()[pinnedRunId];
+        Assert.False(historicalRun.IsCurrent);
+        Assert.True(historicalRun.IsPinned);
     }
 
     [Fact]
@@ -193,7 +221,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
 
             Assert.False(runStore.SupportsRunSelection);
             Assert.False(runDirectory.StartsWith(workspace.Path, StringComparison.OrdinalIgnoreCase));
-            Assert.Collection(runStore.GetRuns(), run => Assert.True(run.IsCurrent));
+            Assert.Collection(runStore.GetRuns().Values, run => Assert.True(run.IsCurrent));
             Assert.True(File.Exists(databasePath));
         }
 
@@ -349,7 +377,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
 
         Assert.Equal(firstDatabasePath, secondRunStore.DatabasePath);
         Assert.False(secondRunStore.SupportsRunSelection);
-        Assert.Collection(secondRunStore.GetRuns(), run => Assert.True(run.IsCurrent));
+        Assert.Collection(secondRunStore.GetRuns().Values, run => Assert.True(run.IsCurrent));
         Assert.True(DashboardSqliteDatabase.IsCompatible(secondRunStore.DatabasePath));
         var resumeLog = Assert.Single(
             testSink.Writes,
@@ -482,7 +510,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var currentTelemetryContext = await CreateTelemetryRepositoryAsync(currentRunStore.DatabasePath, options);
 
         Assert.Collection(
-            currentRunStore.GetRuns(),
+            currentRunStore.GetRuns().Values,
             currentRun =>
             {
                 Assert.True(currentRun.IsCurrent);
@@ -530,7 +558,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var currentTelemetryContext = await CreateTelemetryRepositoryAsync(currentRunStore.DatabasePath, options);
 
         Assert.Collection(
-            currentRunStore.GetRuns(),
+            currentRunStore.GetRuns().Values,
             currentRun =>
             {
                 Assert.True(currentRun.IsCurrent);
@@ -550,7 +578,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var workspace = TemporaryWorkspace.Create(testOutputHelper);
         var applicationDirectory = Path.Combine(workspace.Path, DashboardRunStore.GetApplicationDirectoryName("TestApp"));
         var runsDirectory = Path.Combine(applicationDirectory, "runs");
-        var historicalRunDirectories = Enumerable.Range(1, DashboardRunStore.MaxRuns)
+        var historicalRunDirectories = Enumerable.Range(1, DashboardRunStore.MaxHistoricalRuns + 1)
             .Select(index => Path.Combine(
                 runsDirectory,
                 $"{DateTimeOffset.UtcNow.AddDays(-index):yyyyMMddTHHmmssfffZ}"))
@@ -564,10 +592,59 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var currentRunStore = CreateRunStore(CreateOptions(workspace));
         await InitializeAndPublishRunAsync(currentRunStore);
 
-        Assert.Equal(DashboardRunStore.MaxRuns, Directory.GetDirectories(runsDirectory).Length);
+        Assert.Equal(DashboardRunStore.MaxHistoricalRuns + 1, Directory.GetDirectories(runsDirectory).Length);
         Assert.False(Directory.Exists(historicalRunDirectories[^1]));
         Assert.All(historicalRunDirectories[..^1], directory => Assert.True(Directory.Exists(directory)));
         Assert.True(Directory.Exists(currentRunStore.RunDirectory));
+    }
+
+    [Fact]
+    public async Task RunMode_PinnedRunsDoNotCountTowardHistoricalLimitAndReloadFromMetadata()
+    {
+        using var workspace = TemporaryWorkspace.Create(testOutputHelper);
+        var options = CreateOptions(workspace);
+        var startedAt = new DateTimeOffset(2025, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var pinnedRunIds = new List<string>();
+        var pinnedRunDirectories = new List<string>();
+        var runIndex = 0;
+
+        for (var index = 0; index < 3; index++)
+        {
+            string runId;
+            using (var runStore = CreateRunStore(options, new FixedTimeProvider(startedAt.AddDays(runIndex++))))
+            {
+                runId = runStore.RunId;
+                await InitializeAndPublishRunAsync(runStore);
+            }
+
+            using var pinningRunStore = CreateRunStore(options, new FixedTimeProvider(startedAt.AddDays(runIndex++)));
+            await InitializeAndPublishRunAsync(pinningRunStore);
+            var run = pinningRunStore.GetRuns()[runId];
+            pinningRunStore.SetRunPinned(run, isPinned: true);
+            pinnedRunIds.Add(runId);
+            pinnedRunDirectories.Add(Path.GetDirectoryName(run.DatabasePath)!);
+
+            using var metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(pinnedRunDirectories[^1], "run.json")));
+            Assert.True(metadata.RootElement.GetProperty("IsPinned").GetBoolean());
+        }
+
+        for (var index = 0; index < DashboardRunStore.MaxHistoricalRuns - 1; index++)
+        {
+            using var runStore = CreateRunStore(options, new FixedTimeProvider(startedAt.AddDays(runIndex++)));
+            await InitializeAndPublishRunAsync(runStore);
+        }
+
+        using var finalRunStore = CreateRunStore(options, new FixedTimeProvider(startedAt.AddDays(runIndex)));
+        await InitializeAndPublishRunAsync(finalRunStore);
+        var runs = finalRunStore.GetRuns().Values;
+        Assert.Equal(
+            runs.OrderByDescending(run => run.IsPinned).ThenByDescending(run => run.StartedAtUtc),
+            runs);
+        Assert.Single(runs, run => run.IsCurrent);
+        Assert.Equal(3, runs.Count(run => !run.IsCurrent && run.IsPinned));
+        Assert.Equal(DashboardRunStore.MaxHistoricalRuns, runs.Count(run => !run.IsCurrent && !run.IsPinned));
+        Assert.All(pinnedRunIds, runId => Assert.True(finalRunStore.GetRuns()[runId].IsPinned));
+        Assert.All(pinnedRunDirectories, directory => Assert.True(Directory.Exists(directory)));
     }
 
     [Fact]
@@ -576,7 +653,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var workspace = TemporaryWorkspace.Create(testOutputHelper);
         var applicationDirectory = Path.Combine(workspace.Path, DashboardRunStore.GetApplicationDirectoryName("TestApp"));
         var runsDirectory = Path.Combine(applicationDirectory, "runs");
-        var historicalRunDirectories = Enumerable.Range(1, DashboardRunStore.MaxRuns)
+        var historicalRunDirectories = Enumerable.Range(1, DashboardRunStore.MaxHistoricalRuns + 1)
             .Select(index => Path.Combine(
                 runsDirectory,
                 $"{DateTimeOffset.UtcNow.AddDays(-index):yyyyMMddTHHmmssfffZ}"))
@@ -598,7 +675,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         await InitializeAndPublishRunAsync(currentRunStore);
 
         Assert.True(Directory.Exists(activeExpiredRun));
-        Assert.Equal(DashboardRunStore.MaxRuns + 1, Directory.GetDirectories(runsDirectory).Length);
+        Assert.Equal(DashboardRunStore.MaxHistoricalRuns + 2, Directory.GetDirectories(runsDirectory).Length);
     }
 
     [Fact]
@@ -625,7 +702,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         dataSource.SelectRun(historicalRunId);
 
         var runsDirectory = Path.GetDirectoryName(historicalRunDirectory)!;
-        foreach (var index in Enumerable.Range(1, DashboardRunStore.MaxRuns - 2))
+        foreach (var index in Enumerable.Range(1, DashboardRunStore.MaxHistoricalRuns - 1))
         {
             Directory.CreateDirectory(Path.Combine(
                 runsDirectory,
@@ -669,7 +746,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         }
 
         using var currentRunStore = CreateRunStore(options);
-        var historicalRun = currentRunStore.GetRuns().Single(run => run.RunId == historicalRunId);
+        var historicalRun = currentRunStore.GetRuns()[historicalRunId];
         var innerRepositoryFactory = CreateRepositoryFactory(options);
         var repositoryFactory = new RecordingRepositoryFactory(innerRepositoryFactory);
         using var dataSourcePool = new DashboardDataSourcePool(currentRunStore, repositoryFactory);
@@ -679,6 +756,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         firstDataSource.SelectRun(historicalRunId);
         secondDataSource.SelectRun(historicalRunId);
 
+        Assert.True(historicalRun.IsLeased);
         var historicalDatabases = repositoryFactory.Databases.Where(database => database.IsReadOnly).ToList();
         var sharedDatabase = Assert.IsType<DashboardSqliteDatabase>(historicalDatabases[0]);
         Assert.Equal(4, historicalDatabases.Count);
@@ -688,13 +766,48 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
 
         firstDataSource.SelectRun(runId: null);
 
+        Assert.True(historicalRun.IsLeased);
         Assert.Empty(secondDataSource.TelemetryRepository.GetResources());
         Assert.Null(currentRunStore.TryAcquireRunLease(historicalRun));
 
         secondDataSource.SelectRun(runId: null);
 
-        using var releasedRunLease = currentRunStore.TryAcquireRunLease(historicalRun);
-        Assert.NotNull(releasedRunLease);
+        Assert.False(historicalRun.IsLeased);
+        using (var releasedRunLease = currentRunStore.TryAcquireRunLease(historicalRun))
+        {
+            Assert.NotNull(releasedRunLease);
+            Assert.True(historicalRun.IsLeased);
+        }
+        Assert.False(historicalRun.IsLeased);
+    }
+
+    [Fact]
+    public async Task SelectedHistoricalRun_CanBePinned()
+    {
+        using var workspace = TemporaryWorkspace.Create(testOutputHelper);
+        var options = CreateOptions(workspace);
+        string historicalRunId;
+
+        using (var historicalRunStore = CreateRunStore(options))
+        {
+            historicalRunId = historicalRunStore.RunId;
+            using var historicalTelemetryContext = await CreateTelemetryRepositoryAsync(historicalRunStore.DatabasePath, options);
+            historicalRunStore.PublishRun();
+        }
+
+        using var currentRunStore = CreateRunStore(options);
+        var historicalRun = currentRunStore.GetRuns()[historicalRunId];
+        using var dataSourcePool = new DashboardDataSourcePool(currentRunStore, CreateRepositoryFactory(options));
+        using var dataSource = CreateDataSource(currentRunStore, dataSourcePool);
+        dataSource.SelectRun(historicalRunId);
+
+        Assert.True(historicalRun.IsLeased);
+        currentRunStore.SetRunPinned(historicalRun, isPinned: true);
+
+        Assert.True(historicalRun.IsPinned);
+        Assert.True(historicalRun.IsLeased);
+        using var metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(Path.GetDirectoryName(historicalRun.DatabasePath)!, "run.json")));
+        Assert.True(metadata.RootElement.GetProperty("IsPinned").GetBoolean());
     }
 
     [Fact]
@@ -703,7 +816,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         using var workspace = TemporaryWorkspace.Create(testOutputHelper);
         var applicationDirectory = Path.Combine(workspace.Path, DashboardRunStore.GetApplicationDirectoryName("TestApp"));
         var runsDirectory = Path.Combine(applicationDirectory, "runs");
-        var historicalRunDirectories = Enumerable.Range(1, DashboardRunStore.MaxRuns)
+        var historicalRunDirectories = Enumerable.Range(1, DashboardRunStore.MaxHistoricalRuns + 1)
             .Select(index => Path.Combine(
                 runsDirectory,
                 $"{DateTimeOffset.UtcNow.AddDays(-index):yyyyMMddTHHmmssfffZ}"))
@@ -755,7 +868,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         }
 
         using var currentRunStore = CreateRunStore(options);
-        var currentRun = Assert.Single(currentRunStore.GetRuns());
+        var currentRun = Assert.Single(currentRunStore.GetRuns().Values);
         var malformedRun = currentRun with
         {
             RunId = malformedRunId,
@@ -764,7 +877,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         };
         var runStore = new TestDashboardRunStore(
             [currentRun, malformedRun],
-            currentRunStore.TryAcquireRunLease);
+            TryOpenTestRunLease);
         var repositoryFactory = CreateRepositoryFactory(options);
         using var dataSourcePool = new DashboardDataSourcePool(runStore, repositoryFactory);
         using var dataSource = CreateDataSource(runStore, dataSourcePool);
@@ -772,10 +885,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         var exception = Assert.Throws<SqliteException>(() => dataSource.SelectRun(malformedRunId));
         Assert.Contains("no such table: dashboard_schema", exception.Message, StringComparison.Ordinal);
 
-        using (var runLease = currentRunStore.TryAcquireRunLease(malformedRun))
-        {
-            Assert.NotNull(runLease);
-        }
+        using var runLease = Assert.IsType<FileStream>(TryOpenTestRunLease(malformedRun));
 
         var malformedRunDirectory = Path.GetDirectoryName(malformedDatabasePath)!;
         Directory.Delete(malformedRunDirectory, recursive: true);
@@ -806,7 +916,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
             command.ExecuteNonQuery();
         }
 
-        var currentRun = Assert.Single(currentRunStore.GetRuns());
+        var currentRun = Assert.Single(currentRunStore.GetRuns().Values);
         var historicalRun = currentRun with
         {
             RunId = "historical",
@@ -827,7 +937,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         };
         var runStore = new TestDashboardRunStore(
             [currentRun, historicalRun, malformedRun, unavailableRun],
-            currentRunStore.TryAcquireRunLease);
+            TryOpenTestRunLease);
         var repositoryFactory = CreateRepositoryFactory(options);
         using var dataSourcePool = new DashboardDataSourcePool(runStore, repositoryFactory);
         using var dataSource = CreateDataSource(runStore, dataSourcePool);
@@ -841,14 +951,14 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         Assert.Equal(historicalRun, dataSource.SelectedRun);
         Assert.Same(historicalTelemetryRepository, dataSource.TelemetryRepository);
         Assert.Same(historicalResourceRepository, dataSource.ResourceRepository);
-        Assert.Null(currentRunStore.TryAcquireRunLease(historicalRun));
+        Assert.Null(TryOpenTestRunLease(historicalRun));
 
         dataSource.SelectRun(unavailableRun.RunId);
 
         Assert.Equal(historicalRun, dataSource.SelectedRun);
         Assert.Same(historicalTelemetryRepository, dataSource.TelemetryRepository);
         Assert.Same(historicalResourceRepository, dataSource.ResourceRepository);
-        Assert.Null(currentRunStore.TryAcquireRunLease(historicalRun));
+        Assert.Null(TryOpenTestRunLease(historicalRun));
     }
 
     [Fact]
@@ -1024,7 +1134,7 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         }
 
         using var currentRunStore = CreateRunStore(options, new FixedTimeProvider(historicalRunTime.AddMilliseconds(1)));
-        var runStore = new TestDashboardRunStore(currentRunStore.GetRuns(), tryAcquireRunLease: _ => null);
+        var runStore = new TestDashboardRunStore(currentRunStore.GetRuns().Values, tryAcquireRunLease: _ => null);
         var repositoryFactory = CreateRepositoryFactory(options);
         var testSink = new TestSink();
         var logger = new TestLogger<DashboardDataSource>(new TestLoggerFactory(testSink, enabled: true));
@@ -1104,6 +1214,32 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
             runStore,
             logger ?? NullLogger<DashboardDataSource>.Instance,
             dataSourcePool);
+    }
+
+    private static FileStream? TryOpenTestRunLease(DashboardRunDescriptor run)
+    {
+        var runDirectory = Path.GetDirectoryName(run.DatabasePath)!;
+        try
+        {
+            var runLock = new FileStream(
+                DashboardRunStore.GetRunLockPath(runDirectory),
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.None,
+                bufferSize: 1,
+                FileOptions.DeleteOnClose);
+            if (!Directory.Exists(runDirectory))
+            {
+                runLock.Dispose();
+                return null;
+            }
+
+            return runLock;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static RepositoryFactory CreateRepositoryFactory(IOptions<DashboardOptions> options)
