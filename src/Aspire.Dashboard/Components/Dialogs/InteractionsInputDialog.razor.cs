@@ -46,6 +46,11 @@ public partial class InteractionsInputDialog : IAsyncDisposable
     private MarkdownProcessor _markdownProcessor = default!;
     private IJSObjectReference? _jsModule;
 
+    // Tracks whether we still need to suppress the browser's native password reveal control on
+    // this dialog's secret-text fields. Set whenever the inputs change and cleared once the JS
+    // shadow-DOM injection has been applied to every secret field (see OnAfterRenderAsync).
+    private bool _pendingHideNativeReveal;
+
     protected override void OnInitialized()
     {
         _editContext = new EditContext(Content);
@@ -64,6 +69,10 @@ public partial class InteractionsInputDialog : IAsyncDisposable
         {
             _content = Content;
             _inputDialogInputViewModels = Content.Inputs.Select(input => new InputViewModel(input)).ToList();
+
+            // Secret-text fields render their own show/hide toggle, so flag that the browser's
+            // native password reveal control needs to be suppressed on them once they've rendered.
+            _pendingHideNativeReveal = _inputDialogInputViewModels.Any(vm => vm.Input.InputType == InputType.SecretText);
 
             // Initialize keys for @ref binding.
             // Do this in case Blazor tries to get the element from the dictionary.
@@ -111,6 +120,35 @@ public partial class InteractionsInputDialog : IAsyncDisposable
                     selectInput.FocusAsync();
                 }
             }
+        }
+
+        // Suppress the browser's native password reveal/clear controls on secret-text inputs so the
+        // dialog's own show/hide toggle is the only one shown. The FluentTextField's shadow root can
+        // occasionally not be ready on the first render, so keep trying on subsequent renders until
+        // hideNativeReveal reports success for every secret field. The JS call is idempotent and
+        // returns immediately once the style is already present.
+        if (_pendingHideNativeReveal && _jsModule is not null)
+        {
+            var allApplied = true;
+
+            foreach (var inputViewModel in _inputDialogInputViewModels)
+            {
+                if (inputViewModel.Input.InputType != InputType.SecretText)
+                {
+                    continue;
+                }
+
+                if (_elementRefs.TryGetValue(inputViewModel, out var element) && element is not null)
+                {
+                    allApplied &= await _jsModule.InvokeAsync<bool>("hideNativeReveal", element.Id);
+                }
+                else
+                {
+                    allApplied = false;
+                }
+            }
+
+            _pendingHideNativeReveal = !allApplied;
         }
     }
 

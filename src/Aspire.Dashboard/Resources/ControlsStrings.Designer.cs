@@ -1231,6 +1231,15 @@ namespace Aspire.Dashboard.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Text content.
+        /// </summary>
+        public static string TextVisualizerContentLabel {
+            get {
+                return ResourceManager.GetString("TextVisualizerContentLabel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Time offset.
         /// </summary>
         public static string TimeOffsetColumnHeader {

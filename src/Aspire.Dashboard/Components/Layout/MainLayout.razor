@@ -4,7 +4,7 @@
 @inject IStringLocalizer<Dialogs> DialogsLoc
 @inherits LayoutComponentBase
 
-<div class="layout" style="@(_isNavMenuOpen ? "overflow: hidden;" : string.Empty)">
+<div class="layout @(_isNavMenuExpanded ? "nav-expanded" : "nav-collapsed")" style="@(_isNavMenuOpen ? "overflow: hidden;" : string.Empty)">
     <div class="aspire-icon">
         <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo"
                       title="@Loc[nameof(Layout.MainLayoutAspire)]"
@@ -19,6 +19,9 @@
             <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo">
                 <ApplicationName/>
             </FluentAnchor>
+            <div class="page-title-slot">
+                <SectionOutlet SectionName="@DashboardUIHelpers.PageTitleTopBarSection" />
+            </div>
             <div class="flex-filler"></div>
             <FluentAnchor Class="header-button"
                           Appearance="Appearance.Stealth"
@@ -50,7 +53,30 @@
             <UserProfile/>
         </FluentHeader>
 
-        <DesktopNavMenu/>
+        @* The nav rail is a flex column: the tab list (DesktopNavMenu) fills the available space and the
+           collapse/expand toggle is pinned to the bottom. Keeping the toggle at the foot of the rail (rather
+           than in the top header) matches the common sidebar pattern and lets it show a full "Collapse sidebar"
+           label beside the icon when the rail is expanded. Toggle state/persistence still lives in MainLayout. *@
+        <div class="desktop-nav-rail">
+            <DesktopNavMenu/>
+            <FluentButton Class="nav-toggle-button nav-toggle-bottom"
+                          Appearance="Appearance.Stealth" OnClick="@ToggleNavMenuExpandedAsync"
+                          Title="@(_isNavMenuExpanded ? Loc[nameof(Layout.NavMenuToggleCollapse)] : Loc[nameof(Layout.NavMenuToggleExpand)])"
+                          aria-label="@(_isNavMenuExpanded ? Loc[nameof(Layout.NavMenuToggleCollapse)] : Loc[nameof(Layout.NavMenuToggleExpand)])">
+                <span class="nav-toggle-content">
+                    @* The glyph mirrors the action the toggle performs so it reads as a real collapse/expand
+                       control rather than a static hamburger: when the rail is expanded, show the "contract"
+                       panel icon (arrow pointing into the panel = collapse); when collapsed, show the "expand"
+                       panel icon (arrow pointing out = expand). This stays in sync with the dynamic Title/aria-label. *@
+                    <FluentIcon Value="@(_isNavMenuExpanded
+                        ? new Icons.Regular.Size24.PanelLeftContract()
+                        : (Icon)new Icons.Regular.Size24.PanelLeftExpand())" Color="Color.Neutral"/>
+                    @* Visible only when the rail is expanded (hidden but kept for assistive tech when collapsed,
+                       see app.css). Always reads "Collapse sidebar" because the label only shows while expanded. *@
+                    <span class="nav-toggle-label">@Loc[nameof(Layout.NavMenuToggleCollapseLabel)]</span>
+                </span>
+            </FluentButton>
+        </div>
     }
     else
     {

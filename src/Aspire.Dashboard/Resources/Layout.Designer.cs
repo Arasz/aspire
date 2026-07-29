@@ -205,6 +205,33 @@ namespace Aspire.Dashboard.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Expand navigation labels.
+        /// </summary>
+        public static string NavMenuToggleExpand {
+            get {
+                return ResourceManager.GetString("NavMenuToggleExpand", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Collapse navigation to icons.
+        /// </summary>
+        public static string NavMenuToggleCollapse {
+            get {
+                return ResourceManager.GetString("NavMenuToggleCollapse", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Collapse sidebar.
+        /// </summary>
+        public static string NavMenuToggleCollapseLabel {
+            get {
+                return ResourceManager.GetString("NavMenuToggleCollapseLabel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Resources.
         /// </summary>
         public static string NavMenuResourcesTab {

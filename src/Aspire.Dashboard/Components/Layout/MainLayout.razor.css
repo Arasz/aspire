@@ -25,8 +25,19 @@
         grid-area: head;
     }
 
-    ::deep.layout > .fluent-appbar {
+    ::deep.layout > .desktop-nav-rail {
         grid-area: nav;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--neutral-layer-4);
+    }
+
+    /* Tab list fills the rail and scrolls if it ever overflows; the bottom toggle (a sibling below)
+       stays pinned because it is flex-shrink:0. min-height:0 lets the scroll container shrink. */
+    ::deep.layout > .desktop-nav-rail > .fluent-appbar {
+        flex: 1 1 auto;
+        min-height: 0;
         overflow-y: auto;
         background: var(--neutral-layer-4);
     }

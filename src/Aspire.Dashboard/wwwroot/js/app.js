@@ -431,6 +431,98 @@ window.scrollToElement = function (elementId) {
     }
 };
 
+// ===== Data grid column auto-fit =====
+// Double-clicking a FluentDataGrid column's resize handle expands (or shrinks) that column so the
+// widest visible cell content fits, then animates the change. FluentDataGrid renders as
+// <table class="fluent-data-grid"> laid out with display:grid; the column widths live in the
+// table's inline grid-template-columns, e.g.:
+//   grid-template-columns: 1.5fr 1.25fr 1fr 2.25fr 2.25fr minmax(150px, 1.5fr);
+// We measure a column's natural content width by momentarily setting just that track to
+// max-content, read the resolved width, then animate the fully-resolved px template from the old
+// width to the fitted width.
+//
+// This is intentionally self-contained (it does not rely on Fluent's internal resize JS) so it
+// keeps working across Fluent UI Blazor upgrades, and it's wired as a document-level listener so it
+// survives Blazor SPA navigations and applies to every grid (Resources, Console, Structured,
+// Traces, Metrics).
+const AUTOFIT_ANIMATING_CLASS = "autofit-animating";
+const AUTOFIT_CONTENT_PADDING = 8; // a little breathing room past the measured content
+const AUTOFIT_MIN_WIDTH = 48;      // never collapse a column to nothing
+
+function autoFitGridColumn(handle) {
+    const grid = handle.closest("table.fluent-data-grid");
+    const header = handle.closest(".column-header");
+    if (!grid || !header) {
+        return;
+    }
+
+    const headers = Array.from(grid.querySelectorAll(".column-header"));
+    const columnIndex = headers.indexOf(header);
+    if (columnIndex < 0) {
+        return;
+    }
+
+    // Resolve the current tracks to concrete px so we have an explicit, animatable start state.
+    // getComputedStyle always returns used px values (fr / minmax resolved), space separated.
+    const startTracks = getComputedStyle(grid).gridTemplateColumns.split(" ");
+    // Guard against grids whose resolved track count doesn't line up with the header cells (e.g. an
+    // extra structural track); bailing avoids corrupting the layout with a misaligned template.
+    if (startTracks.length !== headers.length) {
+        return;
+    }
+
+    // Measure: let only this column grow to its content, read the resulting width, then restore.
+    // A grid max-content track sizes to the widest content contribution of the rendered cells,
+    // which is exactly "fit to the longest value currently on screen".
+    const measureTracks = startTracks.slice();
+    measureTracks[columnIndex] = "max-content";
+    grid.classList.remove(AUTOFIT_ANIMATING_CLASS);
+    grid.style.gridTemplateColumns = measureTracks.join(" ");
+    // Force layout so the max-content measurement reflects the real content width.
+    void grid.offsetWidth;
+
+    // Cap the fit so one very long value (e.g. a big URL/source) can't swallow the whole grid.
+    const maxWidth = Math.max(200, grid.clientWidth * 0.7);
+    const measured = header.getBoundingClientRect().width + AUTOFIT_CONTENT_PADDING;
+    const fitWidth = Math.min(Math.max(measured, AUTOFIT_MIN_WIDTH), maxWidth);
+
+    // Restore the start widths (still no transition) so the animation begins from the old size.
+    grid.style.gridTemplateColumns = startTracks.join(" ");
+    void grid.offsetWidth;
+
+    // Animate to the fitted width. Only this one track changes; the others stay pinned to their
+    // current px, so the grid grows/shrinks predictably - matching normal drag-resize behavior.
+    const targetTracks = startTracks.slice();
+    targetTracks[columnIndex] = `${fitWidth.toFixed(2)}px`;
+    grid.classList.add(AUTOFIT_ANIMATING_CLASS);
+    grid.style.gridTemplateColumns = targetTracks.join(" ");
+
+    const cleanup = function (e) {
+        // transitionend fires per animated property; only react to the one we drive.
+        if (e && e.propertyName !== "grid-template-columns") {
+            return;
+        }
+        grid.classList.remove(AUTOFIT_ANIMATING_CLASS);
+        grid.removeEventListener("transitionend", cleanup);
+    };
+    grid.addEventListener("transitionend", cleanup);
+    // Fallback in case transitionend never fires (no measurable change, reduced motion, or a
+    // browser that can't interpolate grid-template-columns and snaps instantly instead).
+    setTimeout(cleanup, 500);
+}
+
+// Register a global double-click listener for grid resize handles. The handle class is
+// "resize-handle" in current Fluent UI Blazor; "col-width-draghandle" is matched too for resilience
+// against a rename. closest() with a descendant selector confirms the handle is inside a grid.
+document.addEventListener("dblclick", function (e) {
+    const handle = e.target.closest?.(".fluent-data-grid .resize-handle, .fluent-data-grid .col-width-draghandle");
+    if (handle) {
+        // Prevent the double-click from selecting the header text while we resize.
+        e.preventDefault();
+        autoFitGridColumn(handle);
+    }
+});
+
 // taken from https://learn.microsoft.com/en-us/aspnet/core/blazor/file-downloads?view=aspnetcore-8.0#download-from-a-stream
 window.downloadStreamAsFile = async function (fileName, contentStreamReference) {
     const arrayBuffer = await contentStreamReference.arrayBuffer();
@@ -443,3 +535,326 @@ window.downloadStreamAsFile = async function (fileName, contentStreamReference) 
     anchorElement.remove();
     URL.revokeObjectURL(url);
 };
+
+// ===== Scroll-to-top / scroll-to-bottom buttons for large scroll containers =====
+// Large, independently-scrolling regions (console logs, traces, structured logs, and the
+// text/markdown visualizer dialogs) can grow to thousands of lines. This adds a pair of floating
+// buttons - jump to top and jump to bottom - that fade in only when the region actually overflows
+// by a meaningful amount and the user isn't already at that edge. Short content shows no chrome at
+// all, so the affordance only appears for genuinely LARGE containers.
+//
+// Design notes:
+// - The control is appended to <body> and positioned with `position: fixed`, tracking the target's
+//   getBoundingClientRect(). We deliberately do NOT wrap or inject nodes inside the scroll container
+//   because that DOM is owned by Blazor's renderer; adding foreign children there can trip Blazor's
+//   node diffing. A body-level sibling is invisible to the render tree.
+// - Discovery re-runs on a debounced MutationObserver so it survives Blazor SPA navigation and picks
+//   up dialogs as they open; registration is idempotent (guarded by a WeakSet).
+// - Reposition/visibility updates are throttled through requestAnimationFrame and driven by the
+//   container's own 'scroll', a ResizeObserver, and window scroll/resize (capture-phase, because
+//   inner scroll events don't bubble to window).
+(function initializeScrollButtonsFeature() {
+    const TARGET_SELECTORS = [
+        ".continuous-scroll-overflow",              // console logs, traces, structured logs
+        ".text-visualizer-container .log-overflow", // JSON / plaintext viewer dialog
+        ".markdown-content"                         // markdown viewer dialog
+    ];
+
+    // Only surface the buttons once there's a meaningful amount to scroll past, so they stay out of
+    // the way for small content. Roughly 1.5 viewports of the region reads as "large" in practice.
+    const OVERFLOW_THRESHOLD_PX = 240;
+    // How far from an edge the user must be before the matching button appears.
+    const EDGE_THRESHOLD_PX = 120;
+
+    const CHEVRON_UP = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.53 12.97a.75.75 0 0 1-1.06 1.06L10 9.56l-4.47 4.47a.75.75 0 0 1-1.06-1.06l5-5a.75.75 0 0 1 1.06 0l5 5Z"/></svg>';
+    const CHEVRON_DOWN = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.47 7.03a.75.75 0 0 1 1.06-1.06L10 10.44l4.47-4.47a.75.75 0 1 1 1.06 1.06l-5 5a.75.75 0 0 1-1.06 0l-5-5Z"/></svg>';
+
+    const registered = new WeakSet();
+    const controls = []; // { container, root, topBtn, bottomBtn, resizeObserver }
+    let rafPending = false;
+
+    function scheduleUpdate() {
+        if (rafPending) {
+            return;
+        }
+        rafPending = true;
+        requestAnimationFrame(function () {
+            rafPending = false;
+            updateAll();
+        });
+    }
+
+    function makeButton(kind, label, svg) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "scroll-button scroll-to-" + kind;
+        btn.setAttribute("aria-label", label);
+        btn.setAttribute("title", label);
+        // Supplemental affordance only - keyboard users can already scroll the focused region
+        // natively, so keep these out of the tab order to avoid extra tab stops per container.
+        btn.tabIndex = -1;
+        btn.innerHTML = svg;
+        return btn;
+    }
+
+    function register(container) {
+        if (registered.has(container)) {
+            return;
+        }
+        registered.add(container);
+
+        const root = document.createElement("div");
+        root.className = "scroll-buttons";
+        const topBtn = makeButton("top", "Scroll to top", CHEVRON_UP);
+        const bottomBtn = makeButton("bottom", "Scroll to bottom", CHEVRON_DOWN);
+        root.appendChild(topBtn);
+        root.appendChild(bottomBtn);
+        document.body.appendChild(root);
+
+        topBtn.addEventListener("click", function () {
+            container.scrollTo({ top: 0, behavior: "smooth" });
+        });
+        bottomBtn.addEventListener("click", function () {
+            container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+        });
+
+        const entry = { container, root, topBtn, bottomBtn };
+        controls.push(entry);
+
+        container.addEventListener("scroll", scheduleUpdate, { passive: true });
+        const ro = new ResizeObserver(scheduleUpdate);
+        ro.observe(container);
+        entry.resizeObserver = ro;
+
+        scheduleUpdate();
+    }
+
+    // Measures the sticky header that sits at the top of a scroll region, so the scroll-to-top button
+    // can be pushed below it instead of floating over it. Fluent data grids (Structured logs, Traces)
+    // render their column header as sticky `<th class="column-header">` cells pinned at the top of the
+    // `.continuous-scroll-overflow` container (position: sticky; top: 0). Console/text/markdown viewers
+    // have no such header, so this returns 0 and the button rides the top edge as before.
+    function stickyHeaderHeight(container) {
+        const cTop = container.getBoundingClientRect().top;
+        let maxBottom = 0;
+        for (const th of container.querySelectorAll("th")) {
+            if (getComputedStyle(th).position !== "sticky") {
+                continue;
+            }
+            const r = th.getBoundingClientRect();
+            // Only count header cells actually pinned at the container's top edge (a small tolerance
+            // absorbs sub-pixel rounding). This excludes sticky *left* columns, whose header cell is
+            // also pinned top but is already covered here, and never matches body rows once scrolled.
+            if (r.height > 0 && (r.top - cTop) < 4) {
+                maxBottom = Math.max(maxBottom, r.bottom - cTop);
+            }
+        }
+        return maxBottom;
+    }
+
+    function updateEntry(entry) {
+        const container = entry.container;
+        const root = entry.root;
+
+        // Drop controls whose container has been removed (page navigation, dialog closed).
+        if (!container.isConnected) {
+            if (entry.resizeObserver) {
+                entry.resizeObserver.disconnect();
+            }
+            root.remove();
+            return false;
+        }
+
+        const rect = container.getBoundingClientRect();
+        const overflow = container.scrollHeight - container.clientHeight;
+        let active = rect.width > 0 && rect.height > 0 && overflow > OVERFLOW_THRESHOLD_PX;
+
+        // When a modal dialog is open, only show buttons for containers inside it; otherwise the
+        // page's own buttons would float on top of the dialog surface.
+        const openDialog = document.querySelector("fluent-dialog");
+        if (openDialog && !openDialog.contains(container)) {
+            active = false;
+        }
+
+        root.classList.toggle("is-active", active);
+        if (!active) {
+            return true;
+        }
+
+        // Center the pair horizontally over the region and span its visible height, so the "scroll to
+        // top" button rides near the top edge and "scroll to bottom" near the bottom edge (see the
+        // space-between layout in .scroll-buttons). Clamp the span to the viewport so the buttons never
+        // drift off-screen when the region is partially scrolled out of view. Exclude the scrollbar from
+        // the horizontal center so the buttons sit over the content area, not the scrollbar gutter.
+        const PAD = 12;
+        const scrollbarWidth = container.offsetWidth - container.clientWidth;
+        const visibleTop = Math.max(rect.top, 0);
+        const visibleBottom = Math.min(rect.bottom, window.innerHeight);
+        // Push the top of the group below any sticky column header so the scroll-to-top button clears
+        // it (the bottom button keeps its anchor because we shrink the height by the same amount).
+        const headerOffset = stickyHeaderHeight(container);
+        root.style.right = "auto";
+        root.style.bottom = "auto";
+        root.style.left = (rect.left + (rect.width - scrollbarWidth) / 2) + "px";
+        root.style.top = (visibleTop + PAD + headerOffset) + "px";
+        root.style.height = Math.max(0, (visibleBottom - visibleTop) - PAD * 2 - headerOffset) + "px";
+
+        const atTop = container.scrollTop <= EDGE_THRESHOLD_PX;
+        const atBottom = overflow - container.scrollTop <= EDGE_THRESHOLD_PX;
+        entry.topBtn.classList.toggle("is-visible", !atTop);
+        entry.bottomBtn.classList.toggle("is-visible", !atBottom);
+        return true;
+    }
+
+    function updateAll() {
+        for (let i = controls.length - 1; i >= 0; i--) {
+            const keep = updateEntry(controls[i]);
+            if (!keep) {
+                registered.delete(controls[i].container);
+                controls.splice(i, 1);
+            }
+        }
+    }
+
+    function scan() {
+        for (const selector of TARGET_SELECTORS) {
+            for (const el of document.querySelectorAll(selector)) {
+                register(el);
+            }
+        }
+    }
+
+    // Debounced rescan so SPA navigation and dialog opens are picked up without thrashing.
+    let scanTimer = null;
+    function scheduleScan() {
+        if (scanTimer !== null) {
+            return;
+        }
+        scanTimer = setTimeout(function () {
+            scanTimer = null;
+            scan();
+            scheduleUpdate();
+        }, 200);
+    }
+
+    // Inner scroll events don't bubble, so listen in the capture phase to catch every region.
+    window.addEventListener("scroll", scheduleUpdate, { passive: true, capture: true });
+    window.addEventListener("resize", scheduleUpdate, { passive: true });
+
+    function start() {
+        scan();
+        new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+        start();
+    }
+})();
+
+// ===== Parent-row hover ownership highlight (Resources grid) =====
+// When the pointer is over a parent resource row, its descendant (child) rows get a subtle tint so
+// the ownership group is visible at a glance. This is deliberately MORE SUBTLE than the direct row
+// :hover (which stays brighter on the row under the cursor): clicking a parent does not act on its
+// children, so this is an affordance hint about grouping, not a selection.
+//
+// Why JS instead of pure CSS: the descendant set depends on runtime nesting. The grid renders a flat
+// list of sibling rows; nesting is expressed only by the name cell's left indent
+// (margin-left = depth * 16px, see Resources.razor). CSS can't express "the following rows whose
+// indent is deeper than mine", so we compute the contiguous deeper-indent block in JS.
+//
+// Notes:
+// - Event delegation via bubbling mouseover/mouseout on document survives Blazor SPA re-renders and
+//   the grid's row virtualization (no per-row listeners to attach/detach).
+// - We index rendered rows in DOM order rather than walking nextElementSibling, because the
+//   virtualized grid can interleave spacer nodes between real rows.
+(function initializeParentHoverHighlightFeature() {
+    const GRID_SELECTOR = ".main-grid";
+    const ROW_SELECTOR = ".fluent-data-grid-row";
+    const NAME_CONTAINER_SELECTOR = ".resources-name-container";
+    const DESCENDANT_CLASS = "parent-hover-descendant";
+    const INDENT_PX = 16; // Must match `context.Depth * 16` in Resources.razor.
+
+    function isDataRow(row) {
+        const type = row.getAttribute("row-type");
+        return type !== "header" && type !== "sticky-header";
+    }
+
+    // Depth is encoded as the name container's left indent. Returns null when there's no name cell
+    // (e.g. the row isn't a resource row), so callers can bail out safely.
+    function depthOf(row) {
+        const nameEl = row.querySelector(NAME_CONTAINER_SELECTOR);
+        if (!nameEl) {
+            return null;
+        }
+        const marginLeft = parseFloat(nameEl.style.marginLeft || getComputedStyle(nameEl).marginLeft) || 0;
+        return Math.round(marginLeft / INDENT_PX);
+    }
+
+    function dataRowsOf(grid) {
+        return Array.prototype.filter.call(grid.querySelectorAll(ROW_SELECTOR), isDataRow);
+    }
+
+    function clearHighlight(grid) {
+        grid.querySelectorAll("." + DESCENDANT_CLASS).forEach(function (r) {
+            r.classList.remove(DESCENDANT_CLASS);
+        });
+    }
+
+    function highlightDescendants(grid, row) {
+        clearHighlight(grid);
+        const depth = depthOf(row);
+        if (depth === null) {
+            return;
+        }
+        const rows = dataRowsOf(grid);
+        const startIndex = rows.indexOf(row);
+        if (startIndex < 0) {
+            return;
+        }
+        // Descendants are the contiguous run of following rows with a deeper indent. The first row
+        // at an equal-or-shallower depth ends this parent's subtree.
+        for (let i = startIndex + 1; i < rows.length; i++) {
+            const d = depthOf(rows[i]);
+            if (d === null || d <= depth) {
+                break;
+            }
+            rows[i].classList.add(DESCENDANT_CLASS);
+        }
+    }
+
+    let currentRow = null;
+
+    document.addEventListener("mouseover", function (event) {
+        const target = event.target;
+        const grid = target && target.closest ? target.closest(GRID_SELECTOR) : null;
+        if (!grid) {
+            return;
+        }
+        const row = target.closest(ROW_SELECTOR);
+        if (!row || !isDataRow(row) || row === currentRow) {
+            return;
+        }
+        currentRow = row;
+        highlightDescendants(grid, row);
+    });
+
+    document.addEventListener("mouseout", function (event) {
+        if (!currentRow) {
+            return;
+        }
+        // Only clear when the pointer actually leaves the grid, not when moving between cells/rows
+        // inside it (those transitions are handled by the mouseover above).
+        const related = event.relatedTarget;
+        const stillInGrid = related && related.closest ? related.closest(GRID_SELECTOR) : null;
+        if (!stillInGrid) {
+            const grid = currentRow.closest(GRID_SELECTOR);
+            if (grid) {
+                clearHighlight(grid);
+            }
+            currentRow = null;
+        }
+    });
+})();
+

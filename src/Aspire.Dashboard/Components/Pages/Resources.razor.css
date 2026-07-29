@@ -95,6 +95,38 @@
     overflow-y: hidden;
 }
 
+/* On desktop the tabs row also hosts the filter controls on the right, so the toolbar shares a
+   single row with the tabs instead of taking its own band above the grid. The row wraps (controls
+   drop below the tabs) when horizontal space is tight, keeping it responsive. */
+::deep .resource-tabs-header-row {
+    grid-area: resources-tab-header;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: calc(var(--design-unit) * 1.5px);
+    min-width: 0;
+    padding-right: var(--layout-right-padding);
+}
+
+/* Let the tabs take their content width and shrink/scroll (see the overflow rule above) instead
+   of pushing the toolbar off the row. */
+::deep .resource-tabs-header-row .resources-tab-header {
+    flex: 0 1 auto;
+}
+
+::deep .resource-tabs-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: calc(var(--design-unit) * 1px);
+}
+
+/* Keep the search box usable but compact so the tabs stay on the same row at typical widths. */
+::deep .resource-tabs-toolbar fluent-search {
+    min-width: 160px;
+}
+
 ::deep .resources-grid-container {
     overflow: auto;
     grid-area: resources-tab-content;

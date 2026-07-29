@@ -172,6 +172,11 @@
         <target state="new">Resources</target>
         <note />
       </trans-unit>
+      <trans-unit id="TextVisualizerContentLabel">
+        <source>Text content</source>
+        <target state="new">Text content</target>
+        <note>Accessible name for the scrollable text/code region in the text visualizer.</note>
+      </trans-unit>
       <trans-unit id="ViewJson">
         <source>View JSON</source>
         <target state="new">View JSON</target>

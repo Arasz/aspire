@@ -73,6 +73,7 @@
                                                   Title="@(input.ViewModel.IsSecretTextVisible ? ControlsStringsLoc[nameof(ControlsStrings.GridValueMaskHideValue)] : ControlsStringsLoc[nameof(ControlsStrings.GridValueMaskShowValue)])"
                                                   OnClick="@(() => ToggleSecretTextVisibilityAsync(input.ViewModel))"
                                                   class="secret-text-toggle-button"
+                                                  tabindex="-1"
                                                   slot="end">
                                         <FluentIcon Value="@GetSecretTextIcon(input.ViewModel)" />
                                     </FluentButton>

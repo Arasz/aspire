@@ -5,8 +5,15 @@
 @{
     var additionalButtonAttributes = new Dictionary<string, object>(AdditionalAttributes ?? ImmutableDictionary<string, object>.Empty)
     {
+        // aria-haspopup is a *global* ARIA attribute, so it is valid on the <fluent-button> host (which
+        // exposes a generic role at the host level) and correctly advertises that activating the button
+        // opens a menu. We intentionally do NOT set aria-expanded here: aria-expanded is only permitted on
+        // a specific set of roles (button, combobox, etc.), and the <fluent-button> host is generic, so
+        // axe/Accessibility Insights flag it as WCAG 4.1.2 aria-allowed-attr. Moving role="button" onto the
+        // host would make aria-expanded legal but introduces a nested-interactive violation because Fluent's
+        // shadow DOM already renders a real <button>. Relying on aria-haspopup alone is the accessible,
+        // spec-compliant choice for this menu-button pattern.
         { "aria-haspopup", "true" },
-        { "aria-expanded", _visible ? "true" : "false" },
         { "onkeydown", (KeyboardEventArgs args) => OnKeyDown(args) }
     };
 }
