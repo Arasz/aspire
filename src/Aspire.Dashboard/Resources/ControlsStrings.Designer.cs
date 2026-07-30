@@ -961,6 +961,24 @@ namespace Aspire.Dashboard.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Scroll to bottom.
+        /// </summary>
+        public static string ScrollToBottom {
+            get {
+                return ResourceManager.GetString("ScrollToBottom", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Scroll to top.
+        /// </summary>
+        public static string ScrollToTop {
+            get {
+                return ResourceManager.GetString("ScrollToTop", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Select a resource.
         /// </summary>
         public static string SelectAResource {

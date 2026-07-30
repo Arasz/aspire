@@ -566,6 +566,11 @@ window.downloadStreamAsFile = async function (fileName, contentStreamReference) 
     // How far from an edge the user must be before the matching button appears.
     const EDGE_THRESHOLD_PX = 120;
 
+    // The only body-level structural changes we care about: a scroll target appearing/disappearing,
+    // or a dialog opening/closing (updateEntry() also keys visibility off whether a dialog is open).
+    // Used to cheaply skip the rescan on high-churn mutations that touch none of these.
+    const MUTATION_TRIGGER_SELECTOR = TARGET_SELECTORS.join(", ") + ", fluent-dialog";
+
     const CHEVRON_UP = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.53 12.97a.75.75 0 0 1-1.06 1.06L10 9.56l-4.47 4.47a.75.75 0 0 1-1.06-1.06l5-5a.75.75 0 0 1 1.06 0l5 5Z"/></svg>';
     const CHEVRON_DOWN = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.47 7.03a.75.75 0 0 1 1.06-1.06L10 10.44l4.47-4.47a.75.75 0 1 1 1.06 1.06l-5 5a.75.75 0 0 1-1.06 0l-5-5Z"/></svg>';
 
@@ -605,8 +610,13 @@ window.downloadStreamAsFile = async function (fileName, contentStreamReference) 
 
         const root = document.createElement("div");
         root.className = "scroll-buttons";
-        const topBtn = makeButton("top", "Scroll to top", CHEVRON_UP);
-        const bottomBtn = makeButton("bottom", "Scroll to bottom", CHEVRON_DOWN);
+        // Labels are localized in .NET and rendered onto <body data-scroll-to-top-label /
+        // data-scroll-to-bottom-label> by App.razor. These buttons are created purely in JS (there's
+        // no Blazor component to receive the strings), so we read them off the document here. Fall
+        // back to English if the attributes are ever absent so the control is never left unlabeled.
+        const labels = document.body?.dataset ?? {};
+        const topBtn = makeButton("top", labels.scrollToTopLabel || "Scroll to top", CHEVRON_UP);
+        const bottomBtn = makeButton("bottom", labels.scrollToBottomLabel || "Scroll to bottom", CHEVRON_DOWN);
         root.appendChild(topBtn);
         root.appendChild(bottomBtn);
         document.body.appendChild(root);
@@ -743,7 +753,37 @@ window.downloadStreamAsFile = async function (fileName, contentStreamReference) 
 
     function start() {
         scan();
-        new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });
+        // A body-wide subtree observer is required because scroll targets are inserted deep in
+        // Blazor's render tree (SPA navigation) and dialogs are appended at the <body> level. But
+        // reacting to every mutation batch would run three document-wide querySelectorAll scans on a
+        // 200ms cadence for nothing on high-churn pages (streaming console logs, large grids). So we
+        // first cheaply check whether a batch actually added or removed a scroll target (or a dialog)
+        // before scheduling a rescan; pure content churn inside an already-registered container is
+        // ignored. This keeps discovery correct while dropping the continuous idle cost.
+        new MutationObserver(onBodyMutations).observe(document.body, { childList: true, subtree: true });
+    }
+
+    function onBodyMutations(mutations) {
+        for (const m of mutations) {
+            if (nodeListHasTrigger(m.addedNodes) || nodeListHasTrigger(m.removedNodes)) {
+                scheduleScan();
+                return;
+            }
+        }
+    }
+
+    function nodeListHasTrigger(nodes) {
+        for (const node of nodes) {
+            // Only element nodes can be (or contain) a scroll region or dialog; skip text/comment
+            // churn, which is what streaming log output mostly produces.
+            if (node.nodeType !== 1) {
+                continue;
+            }
+            if (node.matches?.(MUTATION_TRIGGER_SELECTOR) || node.querySelector?.(MUTATION_TRIGGER_SELECTOR)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     if (document.readyState === "loading") {

@@ -173,6 +173,10 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
             $"html[data-theme='{theme.ToLowerInvariant()}']",
             new PageWaitForSelectorOptions { State = WaitForSelectorState.Attached }).DefaultTimeout();
 
+        // Settle component hydration + fonts before probing so the code block's computed colors are read
+        // against fully applied theme styles (see WaitForComponentsAndFontsAsync).
+        await WaitForComponentsAndFontsAsync(page);
+
         var probeJson = await page.EvaluateAsync<string>(CodeblockColorProbeScript);
         using var probe = JsonDocument.Parse(probeJson);
         var root = probe.RootElement;
@@ -239,6 +243,11 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
             await Assertions.Expect(page.Locator("main")).ToBeVisibleAsync();
         }
 
+        // Ensure every Fluent web component has finished upgrading and fonts have loaded before the
+        // page is treated as scannable (see WaitForComponentsAndFontsAsync). This settles the base
+        // page's comboboxes/buttons so the open click below and the scan don't race hydration.
+        await WaitForComponentsAndFontsAsync(page);
+
         // Open an interactive surface (dialog, flyout panel) when requested. The caller's delegate both
         // triggers the surface and waits for it to render, so the scan below audits the page with that
         // surface open. Done before freezing animations so the surface's own open/fade animation is
@@ -246,6 +255,11 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
         if (openSurfaceAsync is not null)
         {
             await openSurfaceAsync(page);
+
+            // The just-opened dialog mounts its own custom elements (e.g. the Settings language
+            // <fluent-select>); wait for those to upgrade too so the scan doesn't sample a
+            // half-hydrated combobox inside the panel.
+            await WaitForComponentsAndFontsAsync(page);
         }
 
         // Collapse all CSS animations/transitions to their end state before scanning. axe's
@@ -258,6 +272,11 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
         {
             Content = "*, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important; }"
         });
+
+        // Yield two animation frames so the freeze stylesheet above is applied and painted before axe
+        // samples computed styles; otherwise axe can read a value still interpolating from the frame the
+        // stylesheet was injected on.
+        await page.EvaluateAsync("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))").DefaultTimeout();
 
         var axeResults = await page.RunAxe(new AxeRunOptions
         {
@@ -273,6 +292,31 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
         Assert.True(
             blockingViolations.Count == 0,
             BuildFailureMessage(axeResults, blockingViolations, relativeUrl, theme, viewportLabel, surfaceLabel));
+    }
+
+    // Blazor + Fluent web components hydrate asynchronously and independently: app.js clears the
+    // <body> `before-upgrade` class as soon as the *first* custom element upgrades, but other component
+    // types on the page (notably the Settings language <fluent-select> and the filter comboboxes) can
+    // still be mid-upgrade at that moment. axe scanning a half-upgraded combobox reads a transient
+    // role/accessible-name and yields non-deterministic pass/fail results. Wait for every custom element
+    // currently in the DOM to finish upgrading, then for web fonts to finish loading, so the scan (and
+    // any preceding interaction) samples a fully settled, stable page.
+    private static async Task WaitForComponentsAndFontsAsync(IPage page)
+    {
+        await page.EvaluateAsync("""
+            async () => {
+                const undefinedNames = new Set();
+                // :not(:defined) matches only not-yet-upgraded custom elements - built-in elements are
+                // always :defined - so this collects exactly the component types still hydrating.
+                for (const el of document.querySelectorAll(':not(:defined)')) {
+                    undefinedNames.add(el.localName);
+                }
+                await Promise.all([...undefinedNames].map(name => customElements.whenDefined(name)));
+                // document.fonts.ready resolves once the font loads triggered so far settle, so text
+                // metrics/rendering are stable for the scan (the dashboard ships a custom body font).
+                await document.fonts.ready;
+            }
+            """).DefaultTimeout();
     }
 
     private static string BuildFailureMessage(AxeResult results, IReadOnlyList<AxeResultItem> blocking, string relativeUrl, string theme, string? viewportLabel = null, string? surfaceLabel = null)

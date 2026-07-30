@@ -1,4 +1,5 @@
-﻿<!DOCTYPE html>
+﻿@inject IStringLocalizer<Aspire.Dashboard.Resources.ControlsStrings> ControlsLoc
+<!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 
 <head>
@@ -34,7 +35,9 @@
 
 </head>
 
-<body class="before-upgrade">
+<body class="before-upgrade"
+      data-scroll-to-top-label="@ControlsLoc[nameof(Aspire.Dashboard.Resources.ControlsStrings.ScrollToTop)]"
+      data-scroll-to-bottom-label="@ControlsLoc[nameof(Aspire.Dashboard.Resources.ControlsStrings.ScrollToBottom)]">
     <Routes @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
     <ReconnectModal />
     <BlazorScript />

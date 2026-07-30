@@ -195,8 +195,13 @@ function setFillColor() {
 }
 
 /**
- * Gives the neutral (gray) ramp a subtle cool-violet undertone so the dark UI reads as
- * richer and more "uplifting" than a flat, drab neutral gray - while staying tasteful.
+ * Gives the neutral (gray) ramp a subtle cool-violet undertone so surfaces feel related to the
+ * .NET brand instead of reading as a flat, drab neutral gray - while staying tasteful.
+ *
+ * This is applied to BOTH themes on purpose (applyTheme calls it unconditionally): in dark mode
+ * it makes the UI read as richer and more "uplifting"; in light mode it lends the same faint
+ * brand-aligned warmth. The saturation is low enough (~8%, see below) that surfaces still read as
+ * neutral gray in either theme - the tint is felt, not seen.
  *
  * The swatch passed here is the MID-POINT of the ramp; Fluent regenerates the entire
  * neutral palette (every surface layer, stroke and neutral fill) from it, so the tint
