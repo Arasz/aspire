@@ -5,17 +5,18 @@
 @inherits LayoutComponentBase
 
 <div class="layout @(_isNavMenuExpanded ? "nav-expanded" : "nav-collapsed")" style="@(_isNavMenuOpen ? "overflow: hidden;" : string.Empty)">
-    <div class="aspire-icon">
-        <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo"
-                      title="@Loc[nameof(Layout.MainLayoutAspire)]"
-                      aria-label="@Loc[nameof(Layout.MainLayoutAspire)]">
-            <FluentIcon Value="@(new AspireIcons.Size24.Logo())"/>
-        </FluentAnchor>
-    </div>
-
     @if (ViewportInformation.IsDesktop)
     {
+        @* Full-width top header. The Aspire logo leads the header so the logo, app name, and page
+           title form a single brand lockup pinned to the top-left. Because the header spans both grid
+           columns (it is no longer confined to the column beside the rail), the lockup keeps a fixed
+           left edge when the nav rail below collapses/expands instead of shifting with the rail width. *@
         <FluentHeader>
+            <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo brand-logo"
+                          title="@Loc[nameof(Layout.MainLayoutAspire)]"
+                          aria-label="@Loc[nameof(Layout.MainLayoutAspire)]">
+                <FluentIcon Value="@(new AspireIcons.Size24.Logo())"/>
+            </FluentAnchor>
             <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo">
                 <ApplicationName/>
             </FluentAnchor>
@@ -80,6 +81,13 @@
     }
     else
     {
+        <div class="aspire-icon">
+            <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo"
+                          title="@Loc[nameof(Layout.MainLayoutAspire)]"
+                          aria-label="@Loc[nameof(Layout.MainLayoutAspire)]">
+                <FluentIcon Value="@(new AspireIcons.Size24.Logo())"/>
+            </FluentAnchor>
+        </div>
         <FluentHeader>
             <FluentAnchor Appearance="Appearance.Stealth" Href="/" Class="logo">
                 <ApplicationName/>

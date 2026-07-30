@@ -4,6 +4,7 @@
 using System.Text;
 using System.Text.Json;
 using Aspire.Dashboard.Model;
+using Aspire.Dashboard.Resources;
 using Aspire.Dashboard.Tests.Integration.Playwright.Infrastructure;
 using Aspire.TestUtilities;
 using Aspire.Tests.Shared.DashboardModel;
@@ -20,8 +21,9 @@ namespace Aspire.Dashboard.Tests.Integration.Playwright;
 /// pages, driven by the axe-core engine (via the MIT-licensed <c>Deque.AxeCore.Playwright</c>
 /// wrapper) against a real dashboard server. Both the light and dark themes are scanned because
 /// color-contrast outcomes differ between them, the primary page is additionally scanned across
-/// mobile, tablet and desktop viewports, and code block syntax colors are checked for AA contrast
-/// in both themes (a surface axe can't reach on its own).
+/// mobile, tablet and desktop viewports, the key dialogs/flyout panels are opened and scanned (a
+/// surface the resting-state page matrix never reaches), and code block syntax colors are checked
+/// for AA contrast in both themes (a surface axe can't reach on its own).
 /// </summary>
 [RequiresFeature(TestFeature.Playwright)]
 public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.AccessibilityDashboardServerFixture>
@@ -87,6 +89,59 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
     public Task DashboardHomePage_IsAccessibleAcrossViewports(string viewportName, int width, int height)
         => AssertNoBlockingWcagViolationsAsync("/", "Light", new ViewportSize { Width = width, Height = height }, viewportName);
 
+    // Dialogs and flyout panels are only reachable behind a click, so the resting-state page matrix
+    // above never audits them. The dashboard's dialog chrome - panel background, input wells, and the
+    // primary/secondary action buttons that read very differently in dark theme - is exactly the kind
+    // of surface where contrast regressions hide. Open each key surface and run the same
+    // serious/critical WCAG gate against it in both themes (color-contrast is the theme-sensitive axis).
+    [Theory]
+    [OuterloopTest("Resource-intensive Playwright browser test")]
+    [InlineData("Settings", "Light")]
+    [InlineData("Settings", "Dark")]
+    [InlineData("Filter", "Light")]
+    [InlineData("Filter", "Dark")]
+    public Task DashboardDialog_HasNoSeriousOrCriticalWcagViolations(string surface, string theme)
+    {
+        var (startUrl, label, openSurfaceAsync) = s_dialogSurfaces[surface];
+        return AssertNoBlockingWcagViolationsAsync(startUrl, theme, s_desktopViewport, openSurfaceAsync: openSurfaceAsync, surfaceLabel: label);
+    }
+
+    // Maps each dialog surface (the InlineData key) to the page it's opened from, a human-readable
+    // label used in failure messages, and the interaction that opens it and waits for it to render.
+    // Settings is a right-aligned flyout panel reachable from every page's header; Filter is the
+    // FilterDialog panel opened from the structured logs toolbar.
+    private static readonly IReadOnlyDictionary<string, (string StartUrl, string Label, Func<IPage, Task> OpenSurfaceAsync)> s_dialogSurfaces =
+        new Dictionary<string, (string, string, Func<IPage, Task>)>(StringComparer.Ordinal)
+        {
+            ["Settings"] = ("/", "Settings flyout", OpenSettingsFlyoutAsync),
+            ["Filter"] = ("/structuredlogs", "Add filter dialog", OpenAddFilterDialogAsync),
+        };
+
+    private static async Task OpenSettingsFlyoutAsync(IPage page)
+    {
+        // The settings button lives in the top header on every page (MainLayout.SettingsButtonId).
+        await page.Locator("#dashboard-settings-button").ClickAsync();
+
+        // The settings panel is a right-aligned fluent-dialog with a fixed id (MainLayout.SettingsDialogId).
+        // Wait on a light-DOM descendant rather than the <fluent-dialog> host: Fluent projects the dialog
+        // body through a slot, so the custom-element host carries no layout box and never satisfies
+        // Playwright's visibility check even once the panel is fully open. .input-container wraps each
+        // settings group in SettingsDialog.razor and is a reliable "content has rendered" signal.
+        await Assertions.Expect(page.Locator("fluent-dialog#SettingsDialog .input-container").First).ToBeVisibleAsync();
+    }
+
+    private static async Task OpenAddFilterDialogAsync(IPage page)
+    {
+        // The structured logs toolbar's "Add filter" button carries the localized aria-label from the
+        // StructuredFiltering resource; reading it back from the same resource keeps the selector correct
+        // regardless of test culture rather than hard-coding the English text.
+        await page.Locator($"fluent-button[aria-label='{StructuredFiltering.AddFilter}']").ClickAsync();
+
+        // FilterDialog opens as a right-aligned panel with no id, so wait for its distinctive
+        // .filter-button-container (see FilterDialog.razor) to confirm the dialog body has rendered.
+        await Assertions.Expect(page.Locator("fluent-dialog .filter-button-container")).ToBeVisibleAsync();
+    }
+
     /// <summary>
     /// Verifies that every highlight.js syntax-token color used in code blocks (the text visualizer and
     /// rendered markdown) meets the WCAG 2.0 AA 4.5:1 minimum contrast against the code block
@@ -142,7 +197,7 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
             $"in the {theme} theme:{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
     }
 
-    private async Task AssertNoBlockingWcagViolationsAsync(string relativeUrl, string theme, ViewportSize viewport, string? viewportLabel = null)
+    private async Task AssertNoBlockingWcagViolationsAsync(string relativeUrl, string theme, ViewportSize viewport, string? viewportLabel = null, Func<IPage, Task>? openSurfaceAsync = null, string? surfaceLabel = null)
     {
         var baseUrl = DashboardServerFixture.DashboardApp.FrontendSingleEndPointAccessor().GetResolvedAddress();
 
@@ -184,6 +239,15 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
             await Assertions.Expect(page.Locator("main")).ToBeVisibleAsync();
         }
 
+        // Open an interactive surface (dialog, flyout panel) when requested. The caller's delegate both
+        // triggers the surface and waits for it to render, so the scan below audits the page with that
+        // surface open. Done before freezing animations so the surface's own open/fade animation is
+        // pinned to its end state too (see below).
+        if (openSurfaceAsync is not null)
+        {
+            await openSurfaceAsync(page);
+        }
+
         // Collapse all CSS animations/transitions to their end state before scanning. axe's
         // color-contrast check multiplies an element's foreground by its (and its ancestors')
         // computed opacity, so if it samples while something is still animating in - e.g. the
@@ -208,12 +272,22 @@ public sealed class AccessibilityTests : PlaywrightTestsBase<AccessibilityTests.
 
         Assert.True(
             blockingViolations.Count == 0,
-            BuildFailureMessage(axeResults, blockingViolations, relativeUrl, theme, viewportLabel));
+            BuildFailureMessage(axeResults, blockingViolations, relativeUrl, theme, viewportLabel, surfaceLabel));
     }
 
-    private static string BuildFailureMessage(AxeResult results, IReadOnlyList<AxeResultItem> blocking, string relativeUrl, string theme, string? viewportLabel = null)
+    private static string BuildFailureMessage(AxeResult results, IReadOnlyList<AxeResultItem> blocking, string relativeUrl, string theme, string? viewportLabel = null, string? surfaceLabel = null)
     {
-        var scanContext = viewportLabel is null ? $"{theme} theme" : $"{theme} theme, {viewportLabel} viewport";
+        var contextParts = new List<string> { $"{theme} theme" };
+        if (viewportLabel is not null)
+        {
+            contextParts.Add($"{viewportLabel} viewport");
+        }
+        if (surfaceLabel is not null)
+        {
+            contextParts.Add(surfaceLabel);
+        }
+
+        var scanContext = string.Join(", ", contextParts);
         var sb = new StringBuilder();
         sb.AppendLine($"Found {blocking.Count} serious/critical WCAG 2.x A/AA accessibility violation(s) on '{relativeUrl}' ({scanContext}):");
         sb.AppendLine();

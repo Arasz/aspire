@@ -118,14 +118,14 @@ fluent-toolbar::part(end) {
          itself from that token - collapses to nothing in both the :focus-within
          and :active states, removing the underline without changing the global
          focus-stroke width used elsewhere.
-      2. A 2px accent outline is drawn on ::part(root) on :focus-visible - i.e.
-         keyboard focus only - so a mouse click no longer paints a heavy
-         full-perimeter ring (which reads as a stark near-white box on the dark
-         surface, since an accessible ring on dark must be near-white). Text inputs
-         always match :focus-visible while focused, so their ring still shows on
-         click where you want it; non-editable selects only ring on keyboard nav.
-         The outline follows the control's corner radius and stays visible in
-         forced-colors mode.
+      2. A 2px accent outline (--dash-focus-ring-color) is drawn on ::part(root) on
+         :focus-visible - i.e. keyboard focus only - so a mouse click no longer paints
+         a heavy full-perimeter ring. On dark the ring is a tamed mid-violet rather than
+         the near-white --accent-fill-rest, so it stays a calm accent edge while keeping
+         >=3:1 non-text contrast (WCAG 2.4.11). Text inputs always match :focus-visible
+         while focused, so their ring still shows on click where you want it; non-editable
+         selects only ring on keyboard nav. The outline follows the control's corner radius
+         and stays visible in forced-colors mode.
 */
 fluent-text-field,
 fluent-search,
@@ -138,7 +138,7 @@ fluent-text-field:focus-visible::part(root),
 fluent-search:focus-visible::part(root),
 fluent-number-field:focus-visible::part(root),
 fluent-text-area:focus-visible::part(root) {
-    outline: 2px solid var(--accent-fill-rest);
+    outline: 2px solid var(--dash-focus-ring-color);
     outline-offset: 1px;
 }
 
@@ -190,7 +190,7 @@ fluent-combobox {
 
 fluent-select:focus-visible::part(control),
 fluent-combobox:focus-visible::part(control) {
-    outline: 2px solid var(--accent-fill-rest);
+    outline: 2px solid var(--dash-focus-ring-color);
     outline-offset: 1px;
 }
 
@@ -224,6 +224,11 @@ fluent-combobox:focus-visible::part(control) {
     --kbd-background-color: var(--neutral-layer-4);
     --dialog-background-color: #ffffff;
     --dialog-border-color: #e5e5e5;
+    /* Keyboard focus ring color. Single knob for the 2px :focus-visible outline shared by text inputs,
+       selects/comboboxes and scroll buttons. Defaults to the accent fill (a dark violet on light theme,
+       which reads fine on white); dark theme overrides it to a tamed violet because the dark accent fill
+       (--accent-fill-rest #e5bfff) is a near-white lavender that paints a loud halo on the violet panels. */
+    --dash-focus-ring-color: var(--accent-fill-rest);
     /* Message bar surfaces derive from the shared --aspire-status-* seeds (tokens.css)
        so each intent hue is defined once and every theme mixes its own surface from it.
        Light theme: a faint wash of the seed over the near-white neutral layer plus a
@@ -245,10 +250,16 @@ fluent-combobox:focus-visible::part(control) {
        provider does not redefine, so it inherits down to the message/title/link correctly.
        Light theme: near-black ink reads AA+ on the faint near-white intent washes. */
     --messagebar-foreground-color: #242424;
-    /* Light theme: a code surface exactly equal to --neutral-fill-hover sits too close to the
-       surrounding panel/dialog fill, so code blocks barely read as a distinct surface. Nudge it a
-       touch darker (mix ~8% black in) so <pre>/JSON blocks have a clear, slightly recessed surface. */
-    --codeblock-background-color: color-mix(in srgb, var(--neutral-fill-hover) 92%, #000);
+    /* Light theme code surface. It must NOT derive from the neutral ramp: our neutral ramp is
+       intentionally violet-tinted for the app chrome, so a code bg mixed from --neutral-fill-hover
+       (#fcfafd) came out faintly lavender (rgb 232,230,233 - blue > green) AND, at only ~1.24:1 against
+       the white dialog surface, barely separated from it. Pin an explicit neutral grey that is a)
+       tint-free (R=G=B) and b) a deliberate step below the white modal, then pair it with the
+       --codeblock-border-color below so the block reads as a clearly recessed, delineated surface. Kept
+       light enough that the a11y-tuned --hljs-* syntax colors still clear WCAG AA (>= 4.5:1) against it;
+       guarded by the CodeblockContrast a11y test. */
+    --codeblock-background-color: #e4e4e4;
+    --codeblock-border-color: #cfcfcf;
     --table-header-border-color: var(--neutral-stroke-rest);
     --table-body-border-color: #f2f2f2;
     --layout-toolbar-padding: calc(var(--design-unit) * 1.5px);
@@ -271,11 +282,11 @@ fluent-combobox:focus-visible::part(control) {
     --property-grid-background-color: #fbfbfb;
     --property-grid-genai-dialog-background-color: #fbfbfb;
     /* highlight.js (@ericwbailey a11y-light) syntax colors. The upstream palette is engineered for
-       WCAG AA (>= 4.5:1) on a WHITE code background, but our light codeblock surface is a tinted
-       neutral (--codeblock-background-color below resolves to ~rgb(232,230,233)), which dropped
-       several tokens under 4.5:1. These are darkened just enough to restore >= 4.7:1 against that
-       tinted surface while preserving each token's hue. Guarded by the CodeblockContrast a11y test.
-       default (#545454, 6.1:1) and keyword (#7928a1, 6.4:1) already pass and are left unchanged. */
+       WCAG AA (>= 4.5:1) on a WHITE code background, but our light codeblock surface is a neutral grey
+       (--codeblock-background-color above = #e4e4e4 / rgb(228,228,228)), which dropped several tokens
+       under 4.5:1. These are darkened just enough to clear AA against that grey (measured 4.58-6.28:1)
+       while preserving each token's hue. Guarded by the CodeblockContrast a11y test.
+       default (#545454, 5.96:1) and keyword (#7928a1, 6.28:1) have the most headroom. */
     --hljs-default: #545454;
     --hljs-comment: #656565;
     --hljs-variable: #c71b16;
@@ -357,6 +368,11 @@ fluent-combobox:focus-visible::part(control) {
        same hue (~247°) - the panels still stand out as floating surfaces but stay on-theme. */
     --dialog-background-color: #322E50;
     --dialog-border-color: #4A4672;
+    /* Tamed keyboard focus ring: a mid periwinkle-violet in place of the near-white --accent-fill-rest
+       (#e5bfff). It still clears the WCAG 2.4.11 3:1 non-text contrast minimum for focus indicators
+       (~4.8:1 against the panel #322E50, ~6:1 against the input well #262439) but reads as a calm accent
+       edge instead of a stark white box. */
+    --dash-focus-ring-color: #a98eff;
     /* Message bar surfaces derive from the shared --aspire-status-* seeds (tokens.css).
        Dark theme: a restrained tint of the seed over the on-theme violet neutral layer
        replaces the old near-black / over-saturated floods (#3F1011, #411200, #052505),
@@ -378,6 +394,9 @@ fluent-combobox:focus-visible::part(control) {
     /* One step up from the near-black --neutral-layer-4 (#0a081e). Layer 3 (#1a172d) still reads as a
        distinct code surface against the dialog/panel elevation without looking like a black hole. */
     --codeblock-background-color: var(--neutral-layer-3);
+    /* Dark code blocks are already a darker inset sitting on the lighter dialog surface, so they read
+       as distinct without help. Keep them borderless (the border below is a light-theme-only affordance). */
+    --codeblock-border-color: transparent;
     --table-header-border-color: var(--neutral-stroke-rest);
     --table-body-border-color: #474747;
     /* overrides of default fluentui-blazor styling */
@@ -613,12 +632,121 @@ h1 {
     align-items: center;
 }
 
+/* The Fluent toolbar's end slot (search + the view-options / settings menu on the log / trace / metric
+   pages) only receives a row-gap from the base `fluent-toolbar::part(end)` rule above; its column-gap
+   defaults to `normal` (= 0), so horizontally-adjacent end controls - notably the search field and the
+   settings menu button - sit flush against each other with no separation (the "missing gap" between
+   them). Give the end group the same 8px inter-control gap the left group and the Resources tabs
+   toolbar already use, so control spacing is uniform across every page toolbar. */
+.main-toolbar::part(end) {
+    column-gap: calc(var(--design-unit) * 2px);
+}
+
+/* Page toolbars separate their end-slot controls with <DesktopToolbarDivider> elements, but those
+   dividers are rendered borderless (see `fluent-toolbar fluent-divider { border: 0 }` near the top of
+   this sheet), so they show as *invisible* elements that nonetheless still occupy ~8px of layout each.
+   That injected uneven dead space between controls - Resources' search->filter gap was visibly wider
+   than filter->options, and Structured logs / Traces spread their level + filter controls ~24px apart -
+   while Console logs, which has no dividers, sat at a tight 8px. Drop the invisible dividers from layout
+   entirely so every page toolbar relies on the single uniform 8px column-gap above, giving one
+   consistent inter-control rhythm across all pages (the markup stays for now; it simply lays out to
+   nothing). Scoped to the page toolbars so any other fluent-toolbar dividers keep the border-only reset. */
+.main-toolbar fluent-divider,
+.resource-tabs-toolbar fluent-divider {
+    display: none;
+}
+
 /* Let the filter/search field shrink gracefully as space tightens instead of forcing an early,
    awkward wrap. It keeps its natural width on wide screens (flex-basis auto) but can compress down
    to a still-usable 10rem before the toolbar wraps. */
 .main-toolbar fluent-search {
     flex: 0 1 auto;
     min-width: 10rem;
+}
+
+/* Establish the toolbar header as an inline-size container so the toolbar can respond to the space it
+   actually has (viewport minus the nav rail and page padding) rather than the raw viewport width.
+   Consumed by the wrap rule below. inline-size containment is safe here because content-header is a
+   grid row that already stretches to the available width regardless of its contents. */
+.content-header {
+    container-type: inline-size;
+    container-name: page-toolbar;
+}
+
+/* On wide toolbars the end-slot controls (search / level / filters) pin to the right while the left
+   selector stays left - the intended two-sided desktop layout. Fluent pushes that whole end group
+   right with `margin-inline-start:auto`, and the auto margin PERSISTS after the group wraps, so once
+   the toolbar is too narrow to keep the end controls on the first row they get stranded as a
+   right-aligned island with a large dead gap on their left (the ragged multi-row toolbar). Below the
+   wrap-onset width, drop the auto push so every control flows and stacks LEFT-aligned, matching the
+   left-hand controls, so multiple rows read as a clean left-aligned stack instead of ragged islands.
+   The threshold tracks the widest page toolbar's single-row width; container queries survive shadow
+   DOM because the styled ::part resolves its nearest container ancestor through the flat tree. */
+@container page-toolbar (max-width: 1150px) {
+    .main-toolbar::part(end) {
+        margin-inline-start: 0;
+    }
+}
+
+/* Icon-only toolbar buttons (pause, clear, add-filter, and the view-options / settings menu triggers)
+   use Fluent's stealth / neutral / lightweight appearance, which paints a 1px *transparent* border -
+   so at rest they read as bare floating icons with no button affordance. Keep them icon-only, but give
+   them a real button silhouette by coloring that existing border slot with the neutral control stroke,
+   matching the adjacent fluent-search `outline` field and the fluent-selects on the same toolbar. This
+   is intentionally scoped to the page toolbars (`.main-toolbar` on the log/trace/metric subpages and
+   `.resource-tabs-toolbar` on Resources) so the appbar / top-nav icons stay borderless as requested.
+   Accent-filled buttons (the active filter state) already read as buttons via their fill, so they are
+   excluded here to avoid an outline-on-fill clash. */
+.main-toolbar fluent-button:not([appearance="accent"])::part(control),
+.resource-tabs-toolbar fluent-button:not([appearance="accent"])::part(control) {
+    border-color: var(--neutral-stroke-rest);
+}
+
+/* Unify the height of every interactive control on the page toolbars - the filter/search field and
+   all action buttons - to 32px, the same height as the page tabs (Resources / Parameters / Graph)
+   and the header icon buttons. Fluent renders the search field and the stealth/lightweight icon
+   buttons at 28px while the tabs sit at 32px, so the action row read as short and slightly
+   misaligned against the tabs above it. A single 32px control height lines the whole row up.
+
+   The height MUST be set on the host elements: Fluent fixes fluent-button / fluent-search at 28px on
+   the host box, and ::part(control) is height:100% of that host, so overriding only the part can grow
+   the width but never exceed the host's height. The wider neutral buttons (pause / remove) keep their
+   intrinsic auto width and only adopt the shared height. */
+.main-toolbar fluent-button,
+.resource-tabs-toolbar fluent-button,
+.main-toolbar fluent-search,
+.resource-tabs-toolbar fluent-search,
+.main-toolbar fluent-select,
+.resource-tabs-toolbar fluent-select {
+    height: 32px;
+}
+
+/* The bordered "field" box lives in a different shadow part per control: fluent-search paints its
+   border on ::part(root) while fluent-select paints it on ::part(control). Grow whichever part holds
+   the border so the visible field - not just the host box - lines up at 32px with the buttons. */
+.main-toolbar fluent-search::part(root),
+.resource-tabs-toolbar fluent-search::part(root),
+.main-toolbar fluent-select::part(control),
+.resource-tabs-toolbar fluent-select::part(control) {
+    height: 32px;
+}
+
+/* The icon-only toolbar buttons (add-filter, view-options, column-options) hold a 20px glyph in a
+   28px box with zero control padding, so the icon crowds the 1px silhouette we colour above (~4px of
+   room, minus the border). Square them to 32px so the glyph gets ~6px of breathing room on every side
+   and the buttons match the header icon buttons. These use the icon-only appearances - stealth /
+   lightweight, plus accent when the add-filter toggle is active - so a button keeps the same 32px
+   square whether or not a filter is applied. The neutral text-padded buttons (pause / remove) are
+   intentionally excluded so their wider label/padding geometry is preserved. */
+.main-toolbar fluent-button[appearance="stealth"]::part(control),
+.main-toolbar fluent-button[appearance="lightweight"]::part(control),
+.main-toolbar fluent-button[appearance="accent"]::part(control),
+.resource-tabs-toolbar fluent-button[appearance="stealth"]::part(control),
+.resource-tabs-toolbar fluent-button[appearance="lightweight"]::part(control),
+.resource-tabs-toolbar fluent-button[appearance="accent"]::part(control) {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
 }
 
 .datagrid-overflow-area,
@@ -765,33 +893,44 @@ fluent-dialog td[cell-type=columnheader] fluent-button[appearance=stealth]:not(:
     border-color: var(--neutral-stroke-rest) !important;
 }
 
-/* Primary action (Close / Apply filter / Remove): FAST's dark accent recipe paints a pale lavender
-   fill with black text, which reads as a weak, almost-disabled control on the violet panel. Use the
-   saturated brand violet with white text so the primary action clearly leads. --foreground-on-accent
-   is pinned white too so FluentUI's own label color follows the darker fill. */
-[data-theme="dark"] fluent-dialog fluent-button[appearance='accent'] {
-    --foreground-on-accent-rest: #ffffff;
-    --foreground-on-accent-hover: #ffffff;
-    --foreground-on-accent-active: #ffffff;
+/* Primary action buttons on DARK theme: a soft LIGHT-purple fill with a dark-violet label, so the
+   primary action reads as a bright, inviting chip against the dark violet chrome. FAST's stock dark
+   accent recipe is a near-white lavender (looks washed-out/disabled) and the brand-violet + white
+   treatment we used before read heavy; a light-purple fill + dark text is the requested look. The fill
+   and label are mixed from the brand seed (--accent-base-color #512bd4) so they track the theme: ~30%
+   over white is a legible light purple and ~85% over black is a deep-violet label that clears AA
+   (~5.5:1) on that fill. Applies to every accent button/anchor - dialogs AND page toolbars.
+   IMPORTANT: LIGHT theme is intentionally NOT touched here (stays on the stock saturated violet + white
+   recipe), per the design ask. --foreground-on-accent is pinned to the dark label so FluentUI's own
+   slotted label/icon colour follows it instead of painting white. */
+[data-theme="dark"] fluent-button[appearance='accent'],
+[data-theme="dark"] fluent-anchor[appearance='accent'] {
+    --foreground-on-accent-rest: color-mix(in srgb, var(--accent-base-color) 85%, #000000);
+    --foreground-on-accent-hover: color-mix(in srgb, var(--accent-base-color) 85%, #000000);
+    --foreground-on-accent-active: color-mix(in srgb, var(--accent-base-color) 85%, #000000);
 }
 
-[data-theme="dark"] fluent-dialog fluent-button[appearance='accent']:not(:hover):not(:active)::part(control) {
-    background: var(--accent-base-color);
-    color: #ffffff;
-    border-color: color-mix(in srgb, var(--accent-base-color) 78%, #ffffff);
+[data-theme="dark"] fluent-button[appearance='accent']:not(:hover):not(:active)::part(control),
+[data-theme="dark"] fluent-anchor[appearance='accent']:not(:hover):not(:active)::part(control) {
+    background: color-mix(in srgb, var(--accent-base-color) 30%, #ffffff);
+    color: color-mix(in srgb, var(--accent-base-color) 85%, #000000);
+    border-color: color-mix(in srgb, var(--accent-base-color) 45%, #ffffff);
 }
 
-[data-theme="dark"] fluent-dialog fluent-button[appearance='accent']:hover::part(control) {
-    background: color-mix(in srgb, var(--accent-base-color) 84%, #ffffff);
-    color: #ffffff;
+[data-theme="dark"] fluent-button[appearance='accent']:hover::part(control),
+[data-theme="dark"] fluent-anchor[appearance='accent']:hover::part(control) {
+    background: color-mix(in srgb, var(--accent-base-color) 42%, #ffffff);
+    color: color-mix(in srgb, var(--accent-base-color) 88%, #000000);
 }
 
-/* Secondary buttons (Cancel / Manage, neutral or default appearance): the neutral fill is nearly the
-   panel color, so add a clear border and a small lift to give them a real button silhouette. */
+/* Secondary buttons (Cancel / Manage, neutral or default appearance): FAST's neutral fill is nearly the
+   panel color, so they read as borderless text. Sink them to the SAME inset well + soft border the panel
+   inputs use (--neutral-layer-2 / --neutral-stroke-rest) so a secondary button and an adjacent dropdown
+   share one consistent recessed-control treatment; only the accent primary action stays raised in violet. */
 [data-theme="dark"] fluent-dialog fluent-button[appearance='neutral']:not(:hover)::part(control),
 [data-theme="dark"] fluent-dialog fluent-button:not([appearance]):not(:hover)::part(control) {
-    background: var(--neutral-fill-layer-rest);
-    border: 1px solid var(--neutral-stroke-strong-rest);
+    background: var(--neutral-layer-2);
+    border: 1px solid var(--neutral-stroke-rest);
 }
 
 /* Right-align the panel footer's primary action. FluentUI lays the footer out with
@@ -911,9 +1050,11 @@ div.error-counter-badge {
 }
 
 .layout >.header > .header-gutters {
-    /* Compact: pull the icons together and center them vertically. The stock buttons are
-       full-height 50px filled cells; we restyle them below as compact icon buttons instead. */
-    column-gap: 2px;
+    /* Compact but not cramped: a small, even gap between the header children. The stock buttons are
+       full-height 50px filled cells; we restyle them below as compact icon buttons instead. 6px gives
+       the top-right icon cluster (GitHub / help / AI / notifications / settings) clear breathing room
+       between the 32px targets without letting them drift apart. */
+    column-gap: 6px;
     align-items: center;
     /* Align the right edge of the icon cluster with the page content's right gutter (roughly the
        table's right edge) rather than letting it run flush to the window edge. !important is needed
@@ -1161,6 +1302,20 @@ fluent-button[appearance='accent'] .checkmark-icon {
 
 .layout > .header {
     font-size: var(--type-ramp-base-font-size);
+}
+
+/* Two-zone header alignment: the Aspire logo stays pinned far-left as a brand mark above the
+   collapsed nav rail, while the "App name | Page title" text lockup is shifted right so its left edge
+   lines up with the left edge of the content panel below it. When the rail is collapsed that panel
+   (the data grid / message-bar box) starts at ~69px, so we shift the lockup to land its left edge on
+   that same gutter - one clean vertical edge with the page content, not the inset toolbar controls
+   (~81px). The inset is fixed (it does NOT track the rail width) so the lockup stays put when the rail
+   expands, matching the pinned-brand behaviour established for this header. Desktop only; the mobile
+   header puts the logo in a separate cell and must not inherit this shift. */
+@media (min-width: 768px) {
+    .layout > .header > .header-gutters fluent-anchor.logo:not(.brand-logo) {
+        margin-inline-start: 7px;
+    }
 }
 
 /* Page title in the header. Each page's <h1 class="page-header"> is teleported here (via a Blazor
@@ -1451,6 +1606,24 @@ fluent-switch.table-switch::part(label) {
 .page-content-container {
     height: 100%;
     overflow: auto;
+    /* Right gutter for every page's content. The top-header icon cluster is inset from the window
+       edge by the same `--design-unit * 3` (see `.header-gutters` padding-right), so its rightmost
+       icon lands ~12px shy of the edge. Without a matching inset here the page body (toolbar controls,
+       data grid, details pane) ran flush to the window edge and overshot that icon, breaking the shared
+       vertical edge. Mirroring the header inset keeps the content's right edge aligned with - and never
+       past - the last top-nav icon. `box-sizing: border-box` (Fluent global) keeps the 100% width intact. */
+    padding-inline-end: calc(var(--design-unit) * 3px);
+}
+
+/* Companion to the `.page-content-container` right gutter above: the global message bars (update-
+   available, unresolved-parameters, etc.) live in their own grid area (`.messagebar-container`, see
+   MainLayout.razor.css) that spans to the window edge independently of the page body, so the content
+   gutter above does not reach them. The Fluent message bar already carries ~6px of its own end gutter
+   inside the provider, so we add the remaining `--design-unit * 1.5` (6px) here to land its right edge
+   on the same ~12px inset as the page content and the header icon cluster - one continuous right edge
+   down the whole chrome. Targeted from the global sheet (the container is light DOM) so it hot-serves. */
+.layout > .messagebar-container {
+    padding-inline-end: calc(var(--design-unit) * 1.5px);
 }
 
 /* Floating scroll-to-top / scroll-to-bottom buttons for large scroll regions (wired in app.js).
@@ -1509,7 +1682,7 @@ fluent-switch.table-switch::part(label) {
 }
 
 .scroll-button:focus-visible {
-    outline: 2px solid var(--accent-fill-rest);
+    outline: 2px solid var(--dash-focus-ring-color);
     outline-offset: 2px;
     opacity: 1;
 }
@@ -1525,6 +1698,12 @@ fluent-switch.table-switch::part(label) {
    (scoped to the dialog so the full-page console viewer keeps its own black theme). */
 .text-visualizer-container .log-overflow {
     background-color: var(--codeblock-background-color);
+    /* A subtle border delineates the code surface from the dialog. On light theme the fill is only a
+       hair darker than the white modal, so the border (not the fill) is what makes the block read as a
+       clearly separated, recessed panel; on dark theme --codeblock-border-color is transparent so this
+       is a no-op there. box-sizing keeps the added 1px inside the width:100% panel (no layout shift). */
+    border: 1px solid var(--codeblock-border-color);
+    box-sizing: border-box;
     /* Fluent's --control-corner-radius is a UNITLESS number (e.g. "6"), so `border-radius: var(...)`
        would resolve to the invalid `6` and render no rounding. Use the px-bearing --aspire-radius-md
        token instead. The panel already scrolls (overflow), which clips content to these rounded corners. */
