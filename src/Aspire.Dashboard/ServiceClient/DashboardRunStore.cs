@@ -1,10 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.IO.Hashing;
-using System.Text;
+using System.Globalization;
 using System.Text.Json;
 using Aspire.Dashboard.Configuration;
+using Aspire.Hosting;
 using Aspire.Shared;
 using Microsoft.Extensions.Options;
 
@@ -44,7 +44,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
     private const string TemporaryDirectoryPrefix = "aspire-dashboard-";
 
     internal const string DatabaseFileName = "dashboard.db";
-    internal const int MaxApplicationDirectoryNameLength = 80;
+    internal const int MaxApplicationDirectoryNameLength = DashboardRunStorage.MaxApplicationDirectoryNameLength;
     internal const int MaxHistoricalRuns = 5;
     internal const int SchemaVersion = DashboardSqliteDatabase.SchemaVersion;
 
@@ -78,9 +78,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         _deleteRunDirectory = deleteRunDirectory;
         var applicationName = string.IsNullOrWhiteSpace(options.Value.ApplicationName) ? "Aspire" : options.Value.ApplicationName;
         var startedAt = timeProvider.GetUtcNow();
-        // A millisecond timestamp collision is very unlikely. The exclusive run lock below also ensures that if two
-        // Dashboard instances resolve the same run ID concurrently, the second fails instead of sharing the database.
-        var runId = $"{startedAt:yyyyMMddTHHmmssfffZ}";
+        var runId = options.Value.Data.RunId ?? DashboardRunId.Create(startedAt);
         PersistenceMode = options.Value.Data.PersistenceMode;
 
         // Persistent data can contain environment variables, telemetry, and console logs. Restrict the
@@ -96,19 +94,34 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
                 DeleteAbandonedTemporaryDirectories(deleteRunDirectory);
                 break;
             case DashboardPersistenceMode.Run:
-                var applicationDirectory = GetApplicationDirectory(options.Value.Data.Directory, applicationName);
+                var applicationDirectory = DashboardRunStorage.GetApplicationDirectory(options.Value.Data.Directory, applicationName);
                 DirectoryHelper.CreateWithOwnerOnlyPermissions(applicationDirectory);
                 _runsDirectory = Path.Combine(applicationDirectory, "runs");
                 RunDirectory = Path.Combine(_runsDirectory, runId);
                 DatabasePath = Path.Combine(RunDirectory, DatabaseFileName);
-                Directory.CreateDirectory(RunDirectory);
-                _runLock = OpenRequiredRunLock(
+                Directory.CreateDirectory(_runsDirectory);
+                var runLock = OpenRequiredRunLock(
                     RunDirectory,
                     $"Dashboard run '{runId}' is already in use by another dashboard process.");
+                try
+                {
+                    if (Directory.Exists(RunDirectory))
+                    {
+                        throw new InvalidOperationException($"Dashboard run ID '{runId}' already exists. Choose a different run ID.");
+                    }
+
+                    Directory.CreateDirectory(RunDirectory);
+                    _runLock = runLock;
+                }
+                catch
+                {
+                    runLock.Dispose();
+                    throw;
+                }
                 _metadataPath = Path.Combine(RunDirectory, "run.json");
                 break;
             case DashboardPersistenceMode.Resume:
-                RunDirectory = GetApplicationDirectory(options.Value.Data.Directory, applicationName);
+                RunDirectory = DashboardRunStorage.GetApplicationDirectory(options.Value.Data.Directory, applicationName);
                 DatabasePath = Path.Combine(RunDirectory, DatabaseFileName);
                 DirectoryHelper.CreateWithOwnerOnlyPermissions(RunDirectory);
                 var resumeRunLock = OpenRequiredRunLock(
@@ -352,11 +365,10 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
 
     private void PruneRuns(Action<string> deleteRunDirectory)
     {
-        // Run directory names start with a fixed-width UTC timestamp, so ordinal ordering matches creation order.
         var expiredRunDirectories = Directory.EnumerateDirectories(_runsDirectory!)
             .Where(directory => !string.Equals(directory, RunDirectory, StringComparison.OrdinalIgnoreCase))
             .Where(directory => !IsPinnedRunDirectory(directory))
-            .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
+            .OrderByDescending(GetRunStartedAtUtc)
             .Skip(MaxHistoricalRuns);
 
         foreach (var directory in expiredRunDirectories)
@@ -392,6 +404,30 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         {
             return false;
         }
+    }
+
+    private static DateTimeOffset GetRunStartedAtUtc(string runDirectory)
+    {
+        try
+        {
+            var metadataPath = Path.Combine(runDirectory, "run.json");
+            if (JsonSerializer.Deserialize<DashboardRunMetadata>(File.ReadAllText(metadataPath)) is { } metadata)
+            {
+                return metadata.StartedAtUtc;
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+        }
+
+        return DateTimeOffset.TryParseExact(
+            Path.GetFileName(runDirectory),
+            "yyyyMMdd'T'HHmmssfff'Z'",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var startedAt)
+            ? startedAt
+            : DateTimeOffset.MinValue;
     }
 
     private static FileStream OpenRunLock(string runDirectory)
@@ -459,15 +495,8 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         };
     }
 
-    internal static string GetApplicationDirectory(string? dataRoot, string applicationName)
-    {
-        if (string.IsNullOrWhiteSpace(dataRoot))
-        {
-            dataRoot = Path.Combine(AspireHomeDirectory.GetDefault(), "dashboard");
-        }
-
-        return Path.Combine(Path.GetFullPath(dataRoot), GetApplicationDirectoryName(applicationName));
-    }
+    internal static string GetApplicationDirectory(string? dataRoot, string applicationName) =>
+        DashboardRunStorage.GetApplicationDirectory(dataRoot, applicationName);
 
     private static void DeleteDatabaseFiles(string databasePath)
     {
@@ -477,36 +506,8 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         }
     }
 
-    internal static string GetApplicationDirectoryName(string applicationName)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(applicationName);
-
-        const int hashLength = 16;
-        const int separatorLength = 1;
-        var maxPrefixLength = MaxApplicationDirectoryNameLength - separatorLength - hashLength;
-        var prefixBuilder = new StringBuilder(Math.Min(applicationName.Length, maxPrefixLength));
-
-        foreach (var character in applicationName)
-        {
-            if (prefixBuilder.Length == maxPrefixLength)
-            {
-                break;
-            }
-
-            prefixBuilder.Append(character is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '-' or '_'
-                ? character
-                : '-');
-        }
-
-        var prefix = prefixBuilder.ToString().Trim('-', '_');
-        if (prefix.Length == 0)
-        {
-            prefix = "dashboard";
-        }
-
-        var hash = Convert.ToHexString(XxHash3.Hash(Encoding.UTF8.GetBytes(applicationName))).ToLowerInvariant();
-        return $"{prefix}-{hash}";
-    }
+    internal static string GetApplicationDirectoryName(string applicationName) =>
+        DashboardRunStorage.GetApplicationDirectoryName(applicationName);
 
     private sealed class RunLease(DashboardRunStore owner, DashboardRunDescriptor run, FileStream runLock) : IDisposable
     {

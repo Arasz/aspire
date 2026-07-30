@@ -37,7 +37,8 @@ internal sealed record DetachOutputInfo(
     int AppHostPid,
     int CliPid,
     string? DashboardUrl,
-    string LogFile);
+    string LogFile,
+    string? RunId);
 
 [JsonSerializable(typeof(DetachOutputInfo))]
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -157,6 +158,7 @@ internal sealed class RunCommand : BaseCommand
         var noBuild = parseResult.GetValue(s_noBuildOption);
         var format = parseResult.GetValue(AppHostLauncher.s_formatOption);
         var isolated = parseResult.GetValue(AppHostLauncher.s_isolatedOption);
+        var runId = parseResult.GetValue(AppHostLauncher.s_runIdOption);
         var isExtensionHost = ExtensionHelper.IsExtensionHost(InteractionService, out _, out _);
         var captureProfile = parseResult.GetValue(RootCommand.CaptureProfileOption);
         var captureProfileDelay = TimeSpan.FromSeconds(parseResult.GetValue(RootCommand.CaptureProfileDelayOption));
@@ -164,6 +166,13 @@ internal sealed class RunCommand : BaseCommand
         if (isExtensionHost)
         {
             startDebugSession = parseResult.GetValue(RootCommand.StartDebugSessionOption);
+        }
+
+        if (runId is not null && !DashboardRunId.TryValidate(runId, out var runIdError))
+        {
+            return CommandResult.Failure(
+                CliExitCodes.InvalidCommand,
+            string.Format(CultureInfo.CurrentCulture, RunCommandStrings.InvalidRunId, runId, runIdError));
         }
 
         // Validate that --format is only used with --detach
@@ -207,7 +216,15 @@ internal sealed class RunCommand : BaseCommand
             && string.IsNullOrEmpty(_configuration[KnownConfigNames.ExtensionDebugSessionId]))
         {
             extensionInteractionService.DisplayConsolePlainText(string.Format(CultureInfo.CurrentCulture, startDebugSession ? RunCommandStrings.StartingDebugSessionInExtension : RunCommandStrings.StartingRunSessionInExtension, "run"));
-            await extensionInteractionService.StartDebugSessionAsync(ExecutionContext.WorkingDirectory.FullName, passedAppHostProjectFile?.FullName, startDebugSession, new DebugSessionOptions { Command = "run" });
+            await extensionInteractionService.StartDebugSessionAsync(
+                ExecutionContext.WorkingDirectory.FullName,
+                passedAppHostProjectFile?.FullName,
+                startDebugSession,
+                new DebugSessionOptions
+                {
+                    Command = "run",
+                    Args = runId is null ? null : [AppHostLauncher.s_runIdOption.Name, runId]
+                });
             return CommandResult.Success();
         }
 
@@ -296,6 +313,10 @@ internal sealed class RunCommand : BaseCommand
                 BackchannelCompletionSource = backchannelCompletionSource,
             };
             ProfilingTelemetry.AddCurrentContextToEnvironment(context.EnvironmentVariables);
+            if (runId is not null)
+            {
+                context.EnvironmentVariables[DashboardConfigNames.DashboardRunIdName.EnvVarName] = runId;
+            }
             if (captureProfile)
             {
                 ProfileCaptureEnvironment.AddCurrentToEnvironment(context.EnvironmentVariables);
@@ -396,6 +417,12 @@ internal sealed class RunCommand : BaseCommand
 
                 if (dashboardUrls.DashboardHealthy is false)
                 {
+                    if (runId is not null)
+                    {
+                        await CancelAppHostStartupAsync(runCts, runTask, cancellationToken).ConfigureAwait(false);
+                        return CommandResult.Failure(CliExitCodes.FailedToDotnetRunAppHost, RunCommandStrings.DashboardFailedToStartWithRunId);
+                    }
+
                     InteractionService.DisplayMessage(KnownEmojis.Warning, RunCommandStrings.DashboardFailedToStart);
                 }
 
@@ -407,7 +434,8 @@ internal sealed class RunCommand : BaseCommand
                     dashboardUrls.BaseUrlWithLoginToken,
                     dashboardUrls.CodespacesUrlWithLoginToken,
                     _fileLoggerProvider.LogFilePath,
-                    isExtensionHost);
+                    isExtensionHost,
+                    runId: dashboardUrls.RunId);
 
                 if (ExtensionHelper.IsExtensionHost(InteractionService, out var extInteractionService, out _))
                 {
@@ -975,6 +1003,7 @@ internal sealed class RunCommand : BaseCommand
     /// <param name="logFilePath">The full path to the log file.</param>
     /// <param name="pid">The process ID to display, or null to omit the PID row.</param>
     /// <param name="isExtensionHost">Whether the AppHost is running in the Aspire extension.</param>
+    /// <param name="runId">The persisted Dashboard run identifier, or null when persistence is unavailable.</param>
     /// <returns>The column width used, for subsequent grid additions.</returns>
     internal static int RenderAppHostSummary(
         IInteractionService console,
@@ -983,7 +1012,8 @@ internal sealed class RunCommand : BaseCommand
         string? codespacesUrl,
         string logFilePath,
         bool isExtensionHost,
-        int? pid = null)
+        int? pid = null,
+        string? runId = null)
     {
         console.DisplayEmptyLine();
         var grid = new Grid();
@@ -994,12 +1024,17 @@ internal sealed class RunCommand : BaseCommand
         var dashboardLabel = RunCommandStrings.Dashboard;
         var logsLabel = RunCommandStrings.Logs;
         var pidLabel = RunCommandStrings.ProcessId;
+        var runIdLabel = RunCommandStrings.DashboardRunId;
 
         // Calculate column width based on labels that will actually be displayed
         var labels = new List<string> { appHostLabel, logsLabel };
         if (!isExtensionHost)
         {
             labels.Add(dashboardLabel);
+            if (runId is not null)
+            {
+                labels.Add(runIdLabel);
+            }
         }
         if (pid.HasValue)
         {
@@ -1024,6 +1059,12 @@ internal sealed class RunCommand : BaseCommand
         if (!isExtensionHost)
         {
             grid.AddRow(Text.Empty, Text.Empty);
+
+            if (runId is not null)
+            {
+                grid.AddRow(LabelMarkup(runIdLabel), new Text(runId));
+                grid.AddRow(Text.Empty, Text.Empty);
+            }
         }
 
         if (!isExtensionHost)
@@ -1176,6 +1217,13 @@ internal sealed class RunCommand : BaseCommand
         if (noBuild)
         {
             additionalArgs.Add("--no-build");
+        }
+
+        var runId = parseResult.GetValue(AppHostLauncher.s_runIdOption);
+        if (runId is not null)
+        {
+            additionalArgs.Add(AppHostLauncher.s_runIdOption.Name);
+            additionalArgs.Add(runId);
         }
 
         return _appHostLauncher.LaunchDetachedAsync(
