@@ -57,6 +57,8 @@ docker run --rm -d \
 
 Restart the container with the same volume, application name, data directory, and persistence mode to continue using the existing database. The Dashboard can remain running through idle periods, and its data remains available after stop and restart, subject to the configured telemetry retention limits.
 
+The AppHost console-log protocol does not identify the AppHost generation that produced a line. Resume prioritizes preserving logs from later AppHost generations, whose line numbers restart at 1. If the Dashboard restarts while the same AppHost remains running, console logs replayed by that AppHost can therefore be persisted again.
+
 ## Goals
 
 - Preserve resources, console logs, structured logs, traces, spans, and metrics after an application run ends.

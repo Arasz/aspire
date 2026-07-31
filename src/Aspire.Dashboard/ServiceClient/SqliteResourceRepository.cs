@@ -395,17 +395,10 @@ public sealed partial class SqliteResourceRepository : IResourceRepository, IRes
             _resourceStates[storedResource.Resource.Name] = new ResourceState(viewModel);
         }
 
-        foreach (var consoleLogState in connection.Query<ConsoleLogState>("""
-            SELECT resource_name AS ResourceName, MAX(line_number) AS LastLineNumber
-            FROM console_logs
-            GROUP BY resource_name;
-            """))
-        {
-            if (_resourceStates.TryGetValue(consoleLogState.ResourceName, out var state))
-            {
-                state.LastConsoleLogLineNumber = consoleLogState.LastLineNumber;
-            }
-        }
+        // Console line numbers restart at 1 for a new AppHost generation. After a Dashboard restart,
+        // the repository cannot distinguish that new data from a same-generation replay, so Resume
+        // favors preserving new logs and may duplicate a replay from an AppHost that remained running.
+        // Repeat watches within this Dashboard process are still suppressed by the in-memory high-water mark.
     }
 
     private void UpdateResourceStates(IReadOnlyDictionary<string, ResourceViewModel> resources)
@@ -510,12 +503,6 @@ public sealed partial class SqliteResourceRepository : IResourceRepository, IRes
         public required int LineNumber { get; init; }
         public required string Content { get; init; }
         public required bool IsStdErr { get; init; }
-    }
-
-    private sealed class ConsoleLogState
-    {
-        public required string ResourceName { get; init; }
-        public required int LastLineNumber { get; init; }
     }
 
     private sealed class ResourceState(ResourceViewModel resource)

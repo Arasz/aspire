@@ -90,7 +90,7 @@ public sealed class SqliteResourceRepositoryTests(ITestOutputHelper testOutputHe
     }
 
     [Fact]
-    public async Task ConsoleLogs_UseInsertionOrderAndContinueLineNumbersAfterRestart()
+    public async Task ConsoleLogs_SameProcessReplayIsIgnoredAndLineNumbersCanContinueAfterRestart()
     {
         using var workspace = TemporaryWorkspace.Create(testOutputHelper);
         var resource = CreateResource("api", "api");
@@ -130,7 +130,7 @@ public sealed class SqliteResourceRepositoryTests(ITestOutputHelper testOutputHe
     }
 
     [Fact]
-    public async Task ConsoleLogs_ReplayAfterRepositoryRestartIsIgnored()
+    public async Task ConsoleLogs_ResetLineNumbersAfterRepositoryRestartArePersisted()
     {
         using var workspace = TemporaryWorkspace.Create(testOutputHelper);
         var resource = CreateResource("api", "api");
@@ -149,9 +149,9 @@ public sealed class SqliteResourceRepositoryTests(ITestOutputHelper testOutputHe
             var writer = (IResourceRepositoryWriter)restartedRepositoryContext.Repository;
             await writer.ReplaceResourcesAsync([resource]);
             await writer.AddConsoleLogsAsync("api", [
-                new ConsoleLogLine { LineNumber = 1, Text = "first" },
-                new ConsoleLogLine { LineNumber = 2, Text = "second" },
-                new ConsoleLogLine { LineNumber = 3, Text = "third" }
+                new ConsoleLogLine { LineNumber = 1, Text = "new-first" },
+                new ConsoleLogLine { LineNumber = 2, Text = "new-second" },
+                new ConsoleLogLine { LineNumber = 3, Text = "new-third" }
             ]);
         }
 
@@ -166,7 +166,9 @@ public sealed class SqliteResourceRepositoryTests(ITestOutputHelper testOutputHe
             Assert.Single(batches),
             line => Assert.Equal(new global::Aspire.Dashboard.Model.ResourceLogLine(1, "first", false), line),
             line => Assert.Equal(new global::Aspire.Dashboard.Model.ResourceLogLine(2, "second", false), line),
-            line => Assert.Equal(new global::Aspire.Dashboard.Model.ResourceLogLine(3, "third", false), line));
+            line => Assert.Equal(new global::Aspire.Dashboard.Model.ResourceLogLine(1, "new-first", false), line),
+            line => Assert.Equal(new global::Aspire.Dashboard.Model.ResourceLogLine(2, "new-second", false), line),
+            line => Assert.Equal(new global::Aspire.Dashboard.Model.ResourceLogLine(3, "new-third", false), line));
     }
 
     [Fact]
