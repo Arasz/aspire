@@ -16,7 +16,7 @@ namespace Aspire.Hosting.Containers.Tests;
 public class ContainerResourceFailureLoggingTests(ITestOutputHelper testOutputHelper)
 {
     [Fact]
-    [RequiresFeature(TestFeature.Docker)]
+    [RequiresFeature(TestFeature.ContainerRuntime)]
     public async Task BadContainerRuntimeArg()
     {
         using var cts = AsyncTestHelpers.CreateDefaultTimeoutTokenSource(TestConstants.DefaultOrchestratorTestLongTimeout);
@@ -39,7 +39,7 @@ public class ContainerResourceFailureLoggingTests(ITestOutputHelper testOutputHe
     }
 
     [Fact]
-    [RequiresFeature(TestFeature.Docker)]
+    [RequiresFeature(TestFeature.ContainerRuntime)]
     public async Task BadImage()
     {
         using var cts = AsyncTestHelpers.CreateDefaultTimeoutTokenSource(TestConstants.DefaultOrchestratorTestLongTimeout);
@@ -63,7 +63,7 @@ public class ContainerResourceFailureLoggingTests(ITestOutputHelper testOutputHe
     }
 
     [Fact]
-    [RequiresFeature(TestFeature.Docker)]
+    [RequiresFeature(TestFeature.ContainerRuntime)]
     public async Task NeedsAuthentication()
     {
         using var cts = AsyncTestHelpers.CreateDefaultTimeoutTokenSource(TestConstants.DefaultOrchestratorTestLongTimeout);
@@ -87,7 +87,7 @@ public class ContainerResourceFailureLoggingTests(ITestOutputHelper testOutputHe
     }
 
     [Fact]
-    [RequiresFeature(TestFeature.Docker)]
+    [RequiresFeature(TestFeature.ContainerRuntime)]
     public async Task ContainerExitsImmediatelyAfterStart()
     {
         using var cts = AsyncTestHelpers.CreateDefaultTimeoutTokenSource(TestConstants.DefaultOrchestratorTestLongTimeout);
