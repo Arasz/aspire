@@ -136,8 +136,14 @@ public sealed class DashboardDataSourcePool : IDisposable
         }
     }
 
-    internal Task InitializeAsync(CancellationToken cancellationToken) =>
-        Current.Database.InitializeSchemaAsync(cancellationToken);
+    internal async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        await Current.Database.InitializeSchemaAsync(cancellationToken).ConfigureAwait(false);
+        if (_runStore is DashboardRunStore runStore)
+        {
+            runStore.PublishRun();
+        }
+    }
 
     private void Release(Entry entry)
     {

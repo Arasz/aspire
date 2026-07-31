@@ -130,7 +130,7 @@ Run IDs use the UTC start time in `yyyyMMddTHHmmssfffZ` format. `run.json` conta
 - application name
 - database file name
 
-The metadata is written when the run starts. On graceful disposal it is rewritten with the end time and `CleanShutdown` set to `true`. A run left with `CleanShutdown` set to `false` is still discoverable after its process releases the lock; the flag records how it ended rather than disqualifying its data.
+The metadata is written only after the database schema is initialized, so an interrupted startup does not publish an unusable run. On graceful disposal it is rewritten with the end time and `CleanShutdown` set to `true`. A published run left with `CleanShutdown` set to `false` is still discoverable after its process releases the lock; the flag records how it ended rather than disqualifying its data.
 
 ### `Resume`
 
@@ -154,7 +154,7 @@ Historical discovery only includes directories that:
 - are not the current run;
 - are not locked by another Dashboard process;
 - have readable, valid `run.json` metadata; and
-- have the current schema version.
+- have the current metadata schema version.
 
 The current run is listed first. Historical runs are ordered by descending start time.
 
@@ -252,7 +252,7 @@ Selecting `Current` uses the pool-owned writable repositories. Selecting a histo
 4. Reference-counts and shares the database across circuits.
 5. Releases the database and run lock after the last circuit stops using it.
 
-If a requested run was pruned or otherwise became unavailable, selection falls back to the current run. The selected historical run ID is stored in browser session storage and restored when possible.
+The replacement database and repositories are acquired and validated before the selected data source changes. If acquisition or validation fails, the previous repositories and run lease remain active. Interactive failures are logged without terminating the Blazor circuit, and browser session storage retains the run that remains selected.
 
 The repository interfaces preserve subscriptions and watcher behavior for the live database. Historical repositories are immutable snapshots: write methods reject calls, and pages do not register for incoming telemetry updates.
 
@@ -331,9 +331,10 @@ SQL values are parameterized. Schema SQL is compiled into the Dashboard assembly
 
 - A lock collision fails startup instead of allowing two writers to share a run database.
 - An invalid persistence mode fails Dashboard option validation and lists the accepted values.
-- Incomplete or unreadable historical metadata is ignored.
-- A selected historical run that disappears falls back to `Current`.
-- A historical schema mismatch fails that run switch.
+- Incomplete or unreadable historical metadata is ignored during discovery.
+- A historical run that disappears between discovery and selection leaves the previous run selected.
+- A historical schema mismatch fails that run switch without releasing the previous data source.
+- An interactive run-switch failure is logged and does not terminate the Blazor circuit.
 - Failure to prune an expired or abandoned directory is logged and does not fail startup.
 - A write attempted through a historical repository throws `InvalidOperationException`.
 

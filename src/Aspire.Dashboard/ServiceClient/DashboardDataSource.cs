@@ -98,7 +98,6 @@ public sealed class DashboardDataSource : IDashboardRunSelection, IDisposable
         }
 
         var previousRun = SelectedRun;
-        DisposeHistoricalDataSource();
 
         if (!selectedRun.IsCurrent)
         {
@@ -116,22 +115,25 @@ public sealed class DashboardDataSource : IDashboardRunSelection, IDisposable
             if (historicalDataSourceLease is null)
             {
                 _logger.LogWarning("Failed to switch to dashboard run '{RunId}' because it is no longer available.", selectedRun.RunId);
-                SelectCurrentRun(currentRun);
-                LogRunSwitch(previousRun, currentRun);
                 return;
             }
 
+            var previousHistoricalDataSourceLease = _historicalDataSourceLease;
             _historicalDataSourceLease = historicalDataSourceLease;
             TelemetryRepository = historicalDataSourceLease.TelemetryRepository;
             ResourceRepository = historicalDataSourceLease.ResourceRepository;
             IsReadOnly = true;
+            SelectedRun = selectedRun;
+            previousHistoricalDataSourceLease?.Dispose();
         }
         else
         {
+            var previousHistoricalDataSourceLease = _historicalDataSourceLease;
+            _historicalDataSourceLease = null;
             SelectCurrentRun(selectedRun);
+            previousHistoricalDataSourceLease?.Dispose();
         }
 
-        SelectedRun = selectedRun;
         LogRunSwitch(previousRun, selectedRun);
     }
 

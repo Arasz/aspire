@@ -445,6 +445,69 @@ public partial class MainLayoutTests : DashboardTestContext
     }
 
     [Fact]
+    public void DashboardRunSelect_SelectionFailure_KeepsCurrentRunAndCircuitActive()
+    {
+        var runStore = new FluentUISetupHelpers.TestDashboardRunStore(
+        [
+            new(
+                RunId: "current",
+                SchemaVersion: DashboardRunStore.SchemaVersion,
+                StartedAtUtc: DateTimeOffset.UnixEpoch,
+                EndedAtUtc: null,
+                CleanShutdown: false,
+                ApplicationName: "TestApp",
+                DatabasePath: string.Empty,
+                IsCurrent: true),
+            new(
+                RunId: "historical",
+                SchemaVersion: DashboardRunStore.SchemaVersion,
+                StartedAtUtc: DateTimeOffset.UnixEpoch,
+                EndedAtUtc: DateTimeOffset.UnixEpoch,
+                CleanShutdown: true,
+                ApplicationName: "TestApp",
+                DatabasePath: string.Empty,
+                IsCurrent: false)
+        ]);
+        string? storedRunId = null;
+        var sessionStorage = new TestSessionStorage
+        {
+            OnSetAsync = (_, value) => storedRunId = Assert.IsType<string>(value)
+        };
+        SetupMainLayoutServices(dashboardRunStore: runStore, sessionStorage: sessionStorage);
+        JSInterop.SetupVoid("focusElement", _ => true).SetVoidResult();
+        var testSink = new TestSink();
+        Services.AddSingleton<ILogger<MainLayout>>(new TestLogger<MainLayout>(new TestLoggerFactory(testSink, enabled: true)));
+        var runSelection = Assert.IsType<FluentUISetupHelpers.TestDashboardRunSelection>(Services.GetRequiredService<IDashboardRunSelection>());
+        var exception = new InvalidOperationException("The historical database could not be opened.");
+        runSelection.OnSelectRun = runId =>
+        {
+            if (runId == "historical")
+            {
+                throw exception;
+            }
+        };
+
+        var cut = RenderComponent<MainLayout>(builder =>
+        {
+            builder.Add(component => component.ViewportInformation, new ViewportInformation(IsDesktop: true, IsUltraLowHeight: false, IsUltraLowWidth: false));
+            builder.Add(component => component.Body, bodyBuilder => bodyBuilder.AddMarkupContent(0, "<div id=\"body-content\"></div>"));
+        });
+        var runSelect = cut.FindComponent<DashboardRunSelect>();
+        runSelect.Find("fluent-button").Click();
+
+        runSelect.WaitForElements("fluent-menu-item")[1].Click();
+
+        Assert.NotNull(cut.Find("#body-content"));
+        Assert.True(runSelection.SelectedRun.IsCurrent);
+        Assert.Equal(string.Empty, storedRunId);
+        Assert.Equal("Live run", cut.FindComponent<DashboardRunSelect>().FindComponent<AspireMenuButton>().Instance.Text);
+        var errorLog = Assert.Single(testSink.Writes);
+        Assert.Equal(LogLevel.Error, errorLog.LogLevel);
+        Assert.Equal("Failed to switch to dashboard run 'historical'. Keeping dashboard run 'current' selected.", errorLog.Message);
+        Assert.Same(exception, errorLog.Exception);
+    }
+
+    [Fact]
     public async Task RunSelectionPending_RendersCurrentRunWithoutLoadingRuns()
     {
         var runStore = new FluentUISetupHelpers.TestDashboardRunStore(

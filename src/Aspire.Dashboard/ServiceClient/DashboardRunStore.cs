@@ -52,7 +52,9 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
     private readonly DashboardRunMetadata _metadata;
     private readonly ILogger<DashboardRunStore> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly Action<string> _deleteRunDirectory;
     private readonly Lazy<IReadOnlyList<DashboardRunDescriptor>> _runs;
+    private bool _metadataPublished;
 
     public DashboardRunStore(IOptions<DashboardOptions> options, ILogger<DashboardRunStore> logger, TimeProvider timeProvider)
         : this(options, logger, timeProvider, static directory => Directory.Delete(directory, recursive: true))
@@ -67,6 +69,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
     {
         _logger = logger;
         _timeProvider = timeProvider;
+        _deleteRunDirectory = deleteRunDirectory;
         var applicationName = string.IsNullOrWhiteSpace(options.Value.ApplicationName) ? "Aspire" : options.Value.ApplicationName;
         var startedAt = timeProvider.GetUtcNow();
         // A millisecond timestamp collision is very unlikely. The exclusive run lock below also ensures that if two
@@ -142,12 +145,6 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
             ApplicationName = options.Value.ApplicationName,
             DatabaseFileName = Path.GetFileName(DatabasePath)
         };
-        if (_metadataPath is not null)
-        {
-            WriteMetadata(_metadata);
-            PruneRuns(deleteRunDirectory);
-        }
-
         _runs = new(LoadRuns);
 
         _logger.LogDebug(
@@ -196,6 +193,18 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
 
     public IReadOnlyList<DashboardRunDescriptor> GetRuns() => _runs.Value;
 
+    internal void PublishRun()
+    {
+        if (_metadataPath is null || _metadataPublished)
+        {
+            return;
+        }
+
+        WriteMetadata(_metadata);
+        _metadataPublished = true;
+        PruneRuns(_deleteRunDirectory);
+    }
+
     public IDisposable? TryAcquireRunLease(DashboardRunDescriptor run)
     {
         var runDirectory = Path.GetDirectoryName(run.DatabasePath)!;
@@ -236,7 +245,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
                 {
-                    // Ignore incomplete or unreadable run metadata. A later dashboard process may still be writing it.
+                    // Ignore incomplete or unreadable run metadata.
                 }
             }
         }
@@ -255,7 +264,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
     {
         try
         {
-            if (_metadataPath is not null)
+            if (_metadataPublished)
             {
                 WriteMetadata(_metadata with { EndedAtUtc = _timeProvider.GetUtcNow(), CleanShutdown = true });
             }

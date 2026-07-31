@@ -267,6 +267,14 @@ public partial class MainLayout : IGlobalKeydownListener, IAsyncDisposable
         {
             RunSelection.SelectRun(runId);
         }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Failed to switch to dashboard run '{RunId}'. Keeping dashboard run '{SelectedRunId}' selected.",
+                runId,
+                RunSelection.SelectedRun.RunId);
+        }
         finally
         {
             _isSwitchingRuns = false;
