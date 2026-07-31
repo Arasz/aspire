@@ -631,6 +631,35 @@ window.downloadStreamAsFile = async function (fileName, contentStreamReference) 
         const entry = { container, root, topBtn, bottomBtn };
         controls.push(entry);
 
+        // Proximity reveal: only surface the buttons while the pointer is over the scroll region (or over
+        // the buttons themselves). The group is a body-level overlay pinned over the region, so moving from
+        // the container onto a button fires the container's pointerleave; a short hide delay — cancelled
+        // when the pointer enters a button — keeps the buttons from flickering out from under the cursor.
+        // Always-on buttons read as heavy, ever-present chrome (review feedback); this keeps them on demand.
+        let hideTimer = 0;
+        function revealButtons() {
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+                hideTimer = 0;
+            }
+            root.classList.add("is-hovered");
+        }
+        function hideButtonsSoon() {
+            if (hideTimer) {
+                return;
+            }
+            hideTimer = setTimeout(function () {
+                hideTimer = 0;
+                root.classList.remove("is-hovered");
+            }, 200);
+        }
+        container.addEventListener("pointerenter", revealButtons);
+        container.addEventListener("pointerleave", hideButtonsSoon);
+        for (const btn of [topBtn, bottomBtn]) {
+            btn.addEventListener("pointerenter", revealButtons);
+            btn.addEventListener("pointerleave", hideButtonsSoon);
+        }
+
         container.addEventListener("scroll", scheduleUpdate, { passive: true });
         const ro = new ResizeObserver(scheduleUpdate);
         ro.observe(container);
@@ -792,109 +821,3 @@ window.downloadStreamAsFile = async function (fileName, contentStreamReference) 
         start();
     }
 })();
-
-// ===== Parent-row hover ownership highlight (Resources grid) =====
-// When the pointer is over a parent resource row, its descendant (child) rows get a subtle tint so
-// the ownership group is visible at a glance. This is deliberately MORE SUBTLE than the direct row
-// :hover (which stays brighter on the row under the cursor): clicking a parent does not act on its
-// children, so this is an affordance hint about grouping, not a selection.
-//
-// Why JS instead of pure CSS: the descendant set depends on runtime nesting. The grid renders a flat
-// list of sibling rows; nesting is expressed only by the name cell's left indent
-// (margin-left = depth * 16px, see Resources.razor). CSS can't express "the following rows whose
-// indent is deeper than mine", so we compute the contiguous deeper-indent block in JS.
-//
-// Notes:
-// - Event delegation via bubbling mouseover/mouseout on document survives Blazor SPA re-renders and
-//   the grid's row virtualization (no per-row listeners to attach/detach).
-// - We index rendered rows in DOM order rather than walking nextElementSibling, because the
-//   virtualized grid can interleave spacer nodes between real rows.
-(function initializeParentHoverHighlightFeature() {
-    const GRID_SELECTOR = ".main-grid";
-    const ROW_SELECTOR = ".fluent-data-grid-row";
-    const NAME_CONTAINER_SELECTOR = ".resources-name-container";
-    const DESCENDANT_CLASS = "parent-hover-descendant";
-    const INDENT_PX = 16; // Must match `context.Depth * 16` in Resources.razor.
-
-    function isDataRow(row) {
-        const type = row.getAttribute("row-type");
-        return type !== "header" && type !== "sticky-header";
-    }
-
-    // Depth is encoded as the name container's left indent. Returns null when there's no name cell
-    // (e.g. the row isn't a resource row), so callers can bail out safely.
-    function depthOf(row) {
-        const nameEl = row.querySelector(NAME_CONTAINER_SELECTOR);
-        if (!nameEl) {
-            return null;
-        }
-        const marginLeft = parseFloat(nameEl.style.marginLeft || getComputedStyle(nameEl).marginLeft) || 0;
-        return Math.round(marginLeft / INDENT_PX);
-    }
-
-    function dataRowsOf(grid) {
-        return Array.prototype.filter.call(grid.querySelectorAll(ROW_SELECTOR), isDataRow);
-    }
-
-    function clearHighlight(grid) {
-        grid.querySelectorAll("." + DESCENDANT_CLASS).forEach(function (r) {
-            r.classList.remove(DESCENDANT_CLASS);
-        });
-    }
-
-    function highlightDescendants(grid, row) {
-        clearHighlight(grid);
-        const depth = depthOf(row);
-        if (depth === null) {
-            return;
-        }
-        const rows = dataRowsOf(grid);
-        const startIndex = rows.indexOf(row);
-        if (startIndex < 0) {
-            return;
-        }
-        // Descendants are the contiguous run of following rows with a deeper indent. The first row
-        // at an equal-or-shallower depth ends this parent's subtree.
-        for (let i = startIndex + 1; i < rows.length; i++) {
-            const d = depthOf(rows[i]);
-            if (d === null || d <= depth) {
-                break;
-            }
-            rows[i].classList.add(DESCENDANT_CLASS);
-        }
-    }
-
-    let currentRow = null;
-
-    document.addEventListener("mouseover", function (event) {
-        const target = event.target;
-        const grid = target && target.closest ? target.closest(GRID_SELECTOR) : null;
-        if (!grid) {
-            return;
-        }
-        const row = target.closest(ROW_SELECTOR);
-        if (!row || !isDataRow(row) || row === currentRow) {
-            return;
-        }
-        currentRow = row;
-        highlightDescendants(grid, row);
-    });
-
-    document.addEventListener("mouseout", function (event) {
-        if (!currentRow) {
-            return;
-        }
-        // Only clear when the pointer actually leaves the grid, not when moving between cells/rows
-        // inside it (those transitions are handled by the mouseover above).
-        const related = event.relatedTarget;
-        const stillInGrid = related && related.closest ? related.closest(GRID_SELECTOR) : null;
-        if (!stillInGrid) {
-            const grid = currentRow.closest(GRID_SELECTOR);
-            if (grid) {
-                clearHighlight(grid);
-            }
-            currentRow = null;
-        }
-    });
-})();
-

@@ -38,7 +38,7 @@
 .markdown-container .code-title {
     display: flex;
     color: var(--foreground-settings-text);
-    background-color: var(--neutral-fill-hover);
+    background-color: var(--codeblock-header-background-color);
     padding-left: 14px;
     padding-right: 14px;
     border-top-left-radius: 5px;
@@ -97,7 +97,7 @@
 .markdown-container .code-copy-button {
     border: 0;
     border-radius: 5px;
-    background-color: var(--neutral-fill-hover);
+    background-color: var(--codeblock-header-background-color);
     width: 28px;
     height: 28px;
 }

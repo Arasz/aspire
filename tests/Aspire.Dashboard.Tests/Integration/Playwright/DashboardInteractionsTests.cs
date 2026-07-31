@@ -6,7 +6,6 @@ using Aspire.Dashboard.Model;
 using Aspire.Dashboard.Tests.Integration.Playwright.Infrastructure;
 using Aspire.TestUtilities;
 using Aspire.Tests.Shared.DashboardModel;
-using Google.Protobuf.WellKnownTypes;
 using Microsoft.AspNetCore.InternalTesting;
 using Microsoft.Playwright;
 using Xunit;
@@ -14,13 +13,11 @@ using Xunit;
 namespace Aspire.Dashboard.Tests.Integration.Playwright;
 
 // Functional coverage for the net-new interactive behaviors implemented purely in app.js: grid
-// column auto-fit (double-click a resize handle), the parent-row ownership highlight on the
-// Resources grid, and the floating scroll-to-top/bottom buttons for large scroll regions. These
-// carry real runtime logic (column/track alignment, depth parsing keyed to the name indent,
-// overflow/edge thresholds) and are coupled to specific markup (".resources-name-container",
-// ".resize-handle", ".continuous-scroll-overflow", the depth * 16px indent). Scanning resting page
-// state can't catch a regression here, so we drive the interactions and assert their DOM effects -
-// which also fails loudly if any of those selectors are renamed out from under the JS.
+// column auto-fit (double-click a resize handle) and the floating scroll-to-top/bottom buttons for
+// large scroll regions. These carry real runtime logic (column/track alignment, overflow/edge
+// thresholds) and are coupled to specific markup (".resize-handle", ".continuous-scroll-overflow").
+// Scanning resting page state can't catch a regression here, so we drive the interactions and assert
+// their DOM effects - which also fails loudly if any of those selectors are renamed out from under the JS.
 [RequiresFeature(TestFeature.Playwright)]
 public class DashboardInteractionsTests : PlaywrightTestsBase<DashboardInteractionsTests.InteractionsDashboardServerFixture>
 {
@@ -75,35 +72,6 @@ public class DashboardInteractionsTests : PlaywrightTestsBase<DashboardInteracti
 
     [Fact]
     [OuterloopTest("Resource-intensive Playwright browser test")]
-    public async Task ParentRow_Hover_HighlightsDescendantRows()
-    {
-        await RunTestAsync(async page =>
-        {
-            await GoToResourcesAndWaitAsync(page);
-
-            var parentRow = page.Locator(".main-grid .fluent-data-grid-row", new() { HasText = InteractionsDashboardServerFixture.ParentResourceName }).First;
-            var childRow = page.Locator(".main-grid .fluent-data-grid-row", new() { HasText = InteractionsDashboardServerFixture.ChildResourceName }).First;
-            await Assertions.Expect(parentRow).ToBeVisibleAsync();
-            await Assertions.Expect(childRow).ToBeVisibleAsync();
-
-            // Resting state: the child row carries no ownership highlight.
-            await Assertions.Expect(childRow).Not.ToHaveClassAsync(new Regex(@"\bparent-hover-descendant\b"));
-
-            await parentRow.HoverAsync();
-
-            // Hovering the parent tints its descendant (deeper-indent) rows so the ownership group
-            // reads at a glance. This depends on the child's name-cell indent being deeper than the
-            // parent's (margin-left = depth * 16px), which the nested fixture resource produces.
-            await Assertions.Expect(childRow).ToHaveClassAsync(new Regex(@"\bparent-hover-descendant\b"));
-
-            // Moving the pointer off the grid clears the highlight.
-            await page.Mouse.MoveAsync(0, 0);
-            await Assertions.Expect(childRow).Not.ToHaveClassAsync(new Regex(@"\bparent-hover-descendant\b"));
-        });
-    }
-
-    [Fact]
-    [OuterloopTest("Resource-intensive Playwright browser test")]
     public async Task ScrollButtons_ActivateForOverflowingRegion_AndScrollIt()
     {
         await RunTestAsync(async page =>
@@ -138,6 +106,15 @@ public class DashboardInteractionsTests : PlaywrightTestsBase<DashboardInteracti
             await Assertions.Expect(bottomButton).ToHaveClassAsync(new Regex(@"\bis-visible\b"));
             await Assertions.Expect(topButton).Not.ToHaveClassAsync(new Regex(@"\bis-visible\b"));
 
+            // The buttons are proximity-gated (review feedback made them on-demand rather than always-on):
+            // a candidate button carries .is-visible but only actually shows while the pointer is near the
+            // region, when JS toggles .is-hovered on the .scroll-buttons group. Hover the region to reveal
+            // them - this both satisfies Playwright's actionability check for the click below and asserts
+            // the reveal works. The 200ms hide delay is cancelled as the click moves the pointer onto the
+            // button (its own pointerenter fires), so the button stays actionable through the click.
+            await page.Locator("#synthetic-scroll-region").HoverAsync();
+            await Assertions.Expect(bottomButton).ToBeVisibleAsync();
+
             await bottomButton.ClickAsync();
 
             // Clicking jumps the region toward the bottom (smooth scroll; poll for scrollTop to move
@@ -162,7 +139,6 @@ public class DashboardInteractionsTests : PlaywrightTestsBase<DashboardInteracti
     public sealed class InteractionsDashboardServerFixture : DashboardServerFixture
     {
         public const string ParentResourceName = "parentapp";
-        public const string ChildResourceName = "childdb";
 
         protected override IReadOnlyList<ResourceViewModel> Resources =>
         [
@@ -174,24 +150,6 @@ public class DashboardInteractionsTests : PlaywrightTestsBase<DashboardInteracti
                 [
                     new UrlViewModel("http", new Uri("about:blank#parent-url"), isInternal: false, isInactive: false, UrlDisplayPropertiesViewModel.Empty)
                 ]),
-            // Nested under the parent via the ParentName property; the grid renders it one level
-            // deeper (name-cell margin-left = depth * 16px), which is what the parent-hover highlight
-            // reads to find descendants.
-            ModelTestHelpers.CreateResource(
-                resourceName: ChildResourceName,
-                resourceType: KnownResourceTypes.Container,
-                state: KnownResourceState.Running,
-                properties: new Dictionary<string, ResourcePropertyViewModel>
-                {
-                    [KnownProperties.Resource.ParentName] = new ResourcePropertyViewModel(
-                        KnownProperties.Resource.ParentName,
-                        new Value { StringValue = ParentResourceName },
-                        isValueSensitive: false,
-                        knownProperty: null,
-                        sortOrder: 0,
-                        displayName: null,
-                        isHighlighted: false)
-                }),
         ];
     }
 }

@@ -66,9 +66,16 @@
     align-items: center;
 }
 
-::deep .trace-view-grid td:not(.empty-content-cell) {
-    padding: 0;
-    border: 0;
+::deep .trace-view-grid .fluent-data-grid-row td:not(.empty-content-cell) {
+    /* Re-zero the cell padding + border that two global app.css grid rules (compact row padding and
+       row separators, both !important) otherwise force onto every data-grid cell. The waterfall relies
+       on each row being exactly the tick height (32px) with no padding or border so (a) the per-row
+       vertical time ticks stack edge-to-edge into continuous lines instead of dashes, and (b) horizontal
+       row separators don't appear (this grid intentionally has none). This selector is (0,4,1) — one
+       class more specific than the (0,3,1) global padding rule — and uses !important so it wins the
+       cascade against those globals. */
+    padding: 0 !important;
+    border: 0 !important;
     border-radius: 0;
     vertical-align: middle;
 }

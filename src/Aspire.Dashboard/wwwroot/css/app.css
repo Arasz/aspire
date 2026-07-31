@@ -197,13 +197,13 @@ fluent-combobox:focus-visible::part(control) {
 :root {
     --scrollbar-color: #8B8B8B;
     /* Scrollbar tokens. --scrollbar-size drives the ::-webkit-scrollbar thickness — thinner than the
-       stock ~17px classic / overlay width. Thumb + hover colors are a muted tint of the brand violet
-       (via color-mix over transparent) so scrollbars read as on-brand rather than plain grey; they're
-       overridden per-theme below. The track is transparent so scrollbars float over the surface.
-       See the scrollbar rules at the top. */
+       stock ~17px classic / overlay width. Thumb + hover colors are an intentionally quiet, tint-free
+       neutral (semi-transparent black on light, semi-transparent white on dark) so the scrollbars recede
+       into the surface instead of reading as a bright on-brand element; overridden per-theme below. The
+       track is transparent so scrollbars float over the surface. See the scrollbar rules at the top. */
     --scrollbar-size: 8px;
-    --scrollbar-thumb-color: color-mix(in srgb, var(--accent-base-color) 42%, transparent);
-    --scrollbar-thumb-hover-color: color-mix(in srgb, var(--accent-base-color) 68%, transparent);
+    --scrollbar-thumb-color: rgba(0, 0, 0, 0.22);
+    --scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.38);
     --scrollbar-track-color: transparent;
     --log-critical: #F8ECEB;
     --log-error: #F8ECEB;
@@ -260,6 +260,10 @@ fluent-combobox:focus-visible::part(control) {
        guarded by the CodeblockContrast a11y test. */
     --codeblock-background-color: #e4e4e4;
     --codeblock-border-color: #cfcfcf;
+    /* Header strip (language label + copy button) sits a subtle, tint-free step darker than the body so
+       the code block reads as one cohesive recessed surface with a quiet header, rather than the body and
+       header being two unrelated greys (the old --neutral-fill-hover header looked disconnected). */
+    --codeblock-header-background-color: #d8d8d8;
     --table-header-border-color: var(--neutral-stroke-rest);
     --table-body-border-color: #f2f2f2;
     --layout-toolbar-padding: calc(var(--design-unit) * 1.5px);
@@ -338,11 +342,10 @@ fluent-combobox:focus-visible::part(control) {
 
 [data-theme="dark"] {
     --scrollbar-color: #9F9F9F;
-    /* Match the light-theme on-brand violet scrollbars (see :root) instead of the stock grey. On dark
-       surfaces the raw brand violet (--accent-base-color #512bd4) is too dark to read as a thin thumb,
-       so lighten it toward white first, then apply transparency so the thumb still floats over content. */
-    --scrollbar-thumb-color: color-mix(in srgb, color-mix(in srgb, var(--accent-base-color) 68%, #fff) 60%, transparent);
-    --scrollbar-thumb-hover-color: color-mix(in srgb, color-mix(in srgb, var(--accent-base-color) 68%, #fff) 88%, transparent);
+    /* Quiet, tint-free neutral thumb on dark: a semi-transparent white so the scrollbar reads as a
+       subtle overlay that recedes into the surface rather than a bright violet element (see :root). */
+    --scrollbar-thumb-color: rgba(255, 255, 255, 0.20);
+    --scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.34);
     --log-critical: #493634;
     --log-error: #493634;
     --log-warning: #3F3A2B;
@@ -397,6 +400,9 @@ fluent-combobox:focus-visible::part(control) {
     /* Dark code blocks are already a darker inset sitting on the lighter dialog surface, so they read
        as distinct without help. Keep them borderless (the border below is a light-theme-only affordance). */
     --codeblock-border-color: transparent;
+    /* Header strip a hair lighter than the body so the language/copy row is gently set off from the code,
+       replacing the previous jarring mid-grey (--neutral-fill-hover) that read as disconnected from it. */
+    --codeblock-header-background-color: color-mix(in srgb, var(--codeblock-background-color), #fff 5%);
     --table-header-border-color: var(--neutral-stroke-rest);
     --table-body-border-color: #474747;
     /* overrides of default fluentui-blazor styling */
@@ -475,19 +481,12 @@ body {
     cursor: pointer !important;
 }
 
-/* Parent-row hover ownership highlight. When hovering a parent resource, its descendant rows get a
-   faint accent wash so the ownership group reads as a unit. Kept intentionally subtler than the
-   direct :hover on the row under the cursor (clicking a parent doesn't act on children, so this is a
-   grouping hint, not a selection). The `.parent-hover-descendant` class is toggled from app.js since
-   the descendant set depends on runtime row nesting/indent. */
-.main-grid .fluent-data-grid-row.parent-hover-descendant td {
-    background-color: color-mix(in srgb, var(--accent-fill-rest) 8%, transparent);
-}
-
 /* Compact: tighten data grid row vertical padding (Fluent default is 6px top/bottom)
    so more rows are visible at once. Applies to header and body cells. !important is
-   required because Fluent's data-grid CSS loads after app.css at equal specificity. */
-.fluent-data-grid-row td,
+   required because Fluent's data-grid CSS loads after app.css at equal specificity.
+   The empty-/loading-content cells are excluded so their own centered empty-state padding
+   (a generous block that reads as a message, see .empty-content-cell) isn't crushed to 4px. */
+.fluent-data-grid-row td:not(.empty-content-cell):not(.loading-content-cell),
 .fluent-data-grid-row th {
     padding-top: var(--aspire-space-xs) !important;
     padding-bottom: var(--aspire-space-xs) !important;
@@ -1190,13 +1189,7 @@ fluent-button[appearance='accent'] .checkmark-icon {
     padding-right: var(--aspire-space-sm);
 }
 
-.desktop-nav-rail .nav-toggle-label {
-    white-space: nowrap;
-    font-size: var(--type-ramp-base-font-size, 13px);
-    line-height: 1;
-}
-
-/* Collapsed rail: center the icon in the icon-only rail and drop the visible label. The button keeps
+/* Collapsed rail: center the icon in the icon-only rail. The button keeps
    an explicit aria-label, so the accessible name survives even with the text hidden (unlike the nav
    links, which have no aria-label and must keep an sr-only label). */
 .layout.nav-collapsed .desktop-nav-rail .nav-toggle-content {
@@ -1214,10 +1207,6 @@ fluent-button[appearance='accent'] .checkmark-icon {
    up with the centered nav icons above. */
 .layout.nav-collapsed .desktop-nav-rail .nav-toggle-bottom::part(control) {
     justify-content: center !important;
-}
-
-.layout.nav-collapsed .desktop-nav-rail .nav-toggle-label {
-    display: none;
 }
 
 /* Collapsed: visually remove the labels so only the icons remain, but keep them in the accessibility
@@ -1328,15 +1317,36 @@ fluent-button[appearance='accent'] .checkmark-icon {
     align-items: center;
     min-width: 0;
     margin-left: var(--aspire-space-sm);
-    overflow: hidden;
-}
-
-.layout > .header > .header-gutters .page-title-slot .page-header {
-    display: flex;
-    align-items: center;
     /* Symmetric space on both sides of the divider rule (::before) so the brand and page
        title read as two balanced segments rather than a path with a leading slash. */
     gap: var(--aspire-space-sm, 8px);
+    overflow: hidden;
+}
+
+/* Segment divider, drawn only when a page actually supplies a title (:has guards the empty slot).
+   A thin vertical rule (the "brand | context" chrome used by modern app headers) instead of a "/"
+   glyph, which read like a breadcrumb path. It is the slot's first flex child so the container gap
+   provides equal spacing on either side, and a fixed, non-shrinking box so only the title text (not
+   the divider) truncates when space is tight. */
+.layout > .header > .header-gutters .page-title-slot:has(.page-header)::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 1px;
+    height: 1.15em;
+    align-self: center;
+    /* Derive from the hint foreground (the same family the old "/" used, so it reads in both
+       themes) but soften it so a full-height 1px rule stays quiet rather than heavy. */
+    background-color: color-mix(in srgb, var(--neutral-foreground-hint) 60%, transparent);
+}
+
+.layout > .header > .header-gutters .page-title-slot .page-header {
+    /* A plain block (not flex) so text-overflow:ellipsis actually applies: a long page title (e.g. a full
+       trace name) must truncate here instead of overflowing the header into the top-right icon cluster. A
+       flex box would make the text an anonymous flex item that never truncates. min-width:0 lets it shrink
+       below its intrinsic width so the flex slot can compress it; the sibling .flex-filler absorbs slack
+       when the title is short. */
+    display: block;
+    max-width: 100%;
     margin: 0;
     padding: 0;
     min-width: 0;
@@ -1348,21 +1358,6 @@ fluent-button[appearance='accent'] .checkmark-icon {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-/* Segment divider, drawn only when a page actually supplies a title. A thin vertical rule
-   (the "brand | context" chrome used by modern app headers) instead of a "/" glyph, which
-   read like a breadcrumb path. The divider is a flex child, so the container gap above
-   provides equal spacing on either side. */
-.layout > .header > .header-gutters .page-title-slot .page-header::before {
-    content: "";
-    flex: 0 0 auto;
-    width: 1px;
-    height: 1.15em;
-    align-self: center;
-    /* Derive from the hint foreground (the same family the old "/" used, so it reads in both
-       themes) but soften it so a full-height 1px rule stays quiet rather than heavy. */
-    background-color: color-mix(in srgb, var(--neutral-foreground-hint) 60%, transparent);
 }
 
 .flex-filler {
@@ -1537,6 +1532,17 @@ fluent-switch.table-switch::part(label) {
     border-bottom: none;
 }
 
+/* Align the section heading, the Name/Value column headers, and the row values on a single left edge
+   per column (matching the trace "Span" details layout). The Name/Value headers aren't sortable, so
+   Fluent renders their <th> labels flush while still insetting body <td> content by 16px - that left
+   the headers drifting ~16px left of their own values, reading as a 2-3 step stair-case (review
+   feedback). Zero the cell inline-start padding so each header sits directly above its values, and
+   both land under the section heading (which sits at the region's inline content inset). */
+.property-grid-container .fluent-data-grid thead th,
+.property-grid-container .fluent-data-grid tbody td {
+    padding-inline-start: 0 !important;
+}
+
 /* The detail panel body (resource property grids) sat flush against the split-panel edges while the
    panel header has 12px inline padding (--design-unit * 3), so the content looked edge-to-edge and
    misaligned with the header title. Match the header's inline padding so body content lines up under
@@ -1670,7 +1676,12 @@ fluent-switch.table-switch::part(label) {
     transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease, background-color 0.15s ease;
 }
 
-.scroll-button.is-visible {
+/* Proximity reveal: a button becomes a candidate (JS adds .is-visible when its edge is scrollable) but
+   only actually appears while the pointer is near the scroll region (JS toggles .is-hovered on the
+   group). Always-visible buttons read as heavy, ever-present chrome (review feedback); gating on hover
+   keeps the affordance on demand without dominating quiet reading. Keyboard focus still forces it
+   visible via :focus-visible below. */
+.scroll-buttons.is-hovered .scroll-button.is-visible {
     opacity: 0.85;
     visibility: visible;
     transform: none;
@@ -1685,6 +1696,9 @@ fluent-switch.table-switch::part(label) {
     outline: 2px solid var(--dash-focus-ring-color);
     outline-offset: 2px;
     opacity: 1;
+    /* Keyboard focus reveals the button even when the pointer isn't near the region (the hover gate
+       above only covers pointer proximity), so the affordance stays reachable without a mouse. */
+    visibility: visible;
 }
 
 .scroll-button svg {

@@ -68,13 +68,12 @@
                     @* The glyph mirrors the action the toggle performs so it reads as a real collapse/expand
                        control rather than a static hamburger: when the rail is expanded, show the "contract"
                        panel icon (arrow pointing into the panel = collapse); when collapsed, show the "expand"
-                       panel icon (arrow pointing out = expand). This stays in sync with the dynamic Title/aria-label. *@
+                       panel icon (arrow pointing out = expand). This stays in sync with the dynamic Title/aria-label.
+                       No visible text label: the icon plus the dynamic Title/aria-label carry the meaning, and a
+                       written "Collapse sidebar" beside it read as redundant chrome (review feedback). *@
                     <FluentIcon Value="@(_isNavMenuExpanded
                         ? new Icons.Regular.Size24.PanelLeftContract()
                         : (Icon)new Icons.Regular.Size24.PanelLeftExpand())" Color="Color.Neutral"/>
-                    @* Visible only when the rail is expanded (hidden but kept for assistive tech when collapsed,
-                       see app.css). Always reads "Collapse sidebar" because the label only shows while expanded. *@
-                    <span class="nav-toggle-label">@Loc[nameof(Layout.NavMenuToggleCollapseLabel)]</span>
                 </span>
             </FluentButton>
         </div>
