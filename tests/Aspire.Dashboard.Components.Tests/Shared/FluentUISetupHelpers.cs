@@ -267,6 +267,8 @@ internal static class FluentUISetupHelpers
 
         public int GetRunsCallCount { get; private set; }
 
+        public Action<DashboardRunDescriptor, bool>? OnSetRunPinned { get; set; }
+
         public IReadOnlyDictionary<string, DashboardRunDescriptor> GetRuns()
         {
             GetRunsCallCount++;
@@ -275,6 +277,7 @@ internal static class FluentUISetupHelpers
 
         public void SetRunPinned(DashboardRunDescriptor run, bool isPinned)
         {
+            OnSetRunPinned?.Invoke(run, isPinned);
             _runs[run.RunId].IsPinned = isPinned;
         }
 

@@ -44,6 +44,9 @@ public partial class DashboardRunSelect : ComponentBase
     [Inject]
     public required IDashboardRunStore RunStore { get; init; }
 
+    [Inject]
+    public required ILogger<DashboardRunSelect> Logger { get; init; }
+
     protected override void OnParametersSet()
     {
         if (_previousSelectedRunId is not null &&
@@ -92,11 +95,19 @@ public partial class DashboardRunSelect : ComponentBase
         }
     }
 
-    private Task SetRunPinnedAsync(DashboardRunDescriptor run, bool isPinned)
+    private async Task SetRunPinnedAsync(DashboardRunDescriptor run, bool isPinned)
     {
-        RunStore.SetRunPinned(run, isPinned);
-        LoadRuns();
-        return InvokeAsync(StateHasChanged);
+        try
+        {
+            RunStore.SetRunPinned(run, isPinned);
+            LoadRuns();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to update the pinned state of dashboard run '{RunId}'.", run.RunId);
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private string FormatRunOption(DashboardRunDescriptor run)

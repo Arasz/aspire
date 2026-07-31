@@ -542,6 +542,59 @@ public partial class MainLayoutTests : DashboardTestContext
     }
 
     [Fact]
+    public void DashboardRunSelect_PinningFailure_KeepsMenuAndCircuitActive()
+    {
+        var currentRun = new DashboardRunDescriptor(
+            RunId: "current",
+            SchemaVersion: DashboardRunStore.SchemaVersion,
+            StartedAtUtc: DateTimeOffset.UnixEpoch,
+            EndedAtUtc: null,
+            CleanShutdown: false,
+            ApplicationName: "TestApp",
+            DatabasePath: string.Empty,
+            IsCurrent: true);
+        var historicalRun = new DashboardRunDescriptor(
+            RunId: "historical",
+            SchemaVersion: DashboardRunStore.SchemaVersion,
+            StartedAtUtc: DateTimeOffset.UnixEpoch,
+            EndedAtUtc: DateTimeOffset.UnixEpoch,
+            CleanShutdown: true,
+            ApplicationName: "TestApp",
+            DatabasePath: string.Empty,
+            IsCurrent: false);
+        var runStore = new FluentUISetupHelpers.TestDashboardRunStore([currentRun, historicalRun]);
+        var exception = new IOException("The run metadata could not be written.");
+        runStore.OnSetRunPinned = (run, _) =>
+        {
+            if (run.RunId == historicalRun.RunId)
+            {
+                throw exception;
+            }
+        };
+        SetupMainLayoutServices(dashboardRunStore: runStore);
+        var testSink = new TestSink();
+        Services.AddSingleton<ILogger<DashboardRunSelect>>(new TestLogger<DashboardRunSelect>(new TestLoggerFactory(testSink, enabled: true)));
+        var cut = RenderComponent<DashboardRunSelect>(builder =>
+        {
+            builder.Add(component => component.SelectedRunId, currentRun.RunId);
+            builder.Add(component => component.SelectedRunIsCurrent, true);
+            builder.Add(component => component.SelectedRunStartedAtUtc, currentRun.StartedAtUtc);
+        });
+        cut.Find("fluent-button").Click();
+
+        var historicalMenuItem = cut.WaitForElements("fluent-menu-item")[1];
+        Assert.Single(historicalMenuItem.QuerySelectorAll("fluent-button")).Click();
+
+        Assert.False(historicalRun.IsPinned);
+        Assert.True(cut.FindComponent<AspireMenu>().Instance.Open);
+        Assert.NotNull(cut.Find("fluent-button"));
+        var errorLog = Assert.Single(testSink.Writes);
+        Assert.Equal(LogLevel.Error, errorLog.LogLevel);
+        Assert.Equal("Failed to update the pinned state of dashboard run 'historical'.", errorLog.Message);
+        Assert.Same(exception, errorLog.Exception);
+    }
+
+    [Fact]
     public void DashboardRunSelect_SortsHistoricalRunsByPinnedThenDateDescending()
     {
         var currentRun = new DashboardRunDescriptor(

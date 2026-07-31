@@ -29,6 +29,8 @@ public interface IDashboardRunStore
     /// <summary>
     /// Pins or unpins the specified dashboard run.
     /// </summary>
+    /// <param name="run">The dashboard run to update.</param>
+    /// <param name="isPinned"><see langword="true"/> to pin the dashboard run; <see langword="false"/> to unpin it.</param>
     void SetRunPinned(DashboardRunDescriptor run, bool isPinned);
 
     /// <summary>
@@ -569,12 +571,9 @@ public sealed record DashboardRunDescriptor(
     bool IsCurrent)
 {
     /// <summary>
-    /// Gets or sets a value indicating whether the dashboard run is pinned.
+    /// Gets a value indicating whether the dashboard run is pinned.
     /// </summary>
-    public bool IsPinned { get; set; }
+    public bool IsPinned { get; internal set; }
 
-    /// <summary>
-    /// Gets or sets a value indicating whether the dashboard run is leased by this dashboard process.
-    /// </summary>
-    public bool IsLeased { get; set; }
+    internal bool IsLeased { get; set; }
 }

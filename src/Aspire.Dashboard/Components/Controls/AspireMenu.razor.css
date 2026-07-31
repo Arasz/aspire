@@ -13,7 +13,15 @@
 }
 
 fluent-menu-item:hover > span[slot="end"] ::deep .aspire-menu-secondary-action,
+fluent-menu-item:focus-within > span[slot="end"] ::deep .aspire-menu-secondary-action,
 ::deep .aspire-menu-secondary-action.selected {
     opacity: 1;
     visibility: visible;
+}
+
+@media (hover: none) {
+    fluent-menu-item > span[slot="end"] ::deep .aspire-menu-secondary-action {
+        opacity: 1;
+        visibility: visible;
+    }
 }
