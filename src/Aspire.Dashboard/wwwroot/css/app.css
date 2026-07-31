@@ -39,7 +39,7 @@
 /* Fluent web components render their scrollable areas (e.g. the <fluent-select> / <fluent-combobox>
    dropdown listbox) INSIDE a shadow root. The document-level ::-webkit-scrollbar rules above cannot
    cross the shadow boundary, so those dropdowns fell back to the browser's default (grey, wide)
-   scrollbar while everything in the light DOM used the tokenized violet one. ::part() DOES pierce the
+   scrollbar while everything in the light DOM used the tokenized neutral one. ::part() DOES pierce the
    boundary, but `::part(x)::-webkit-scrollbar` is NOT honored in Chromium (verified: an exaggerated
    width rule left the layout gutter unchanged) -- only the STANDARD scrollbar-color / scrollbar-width
    properties apply to a part. Set those on the exposed `listbox` part so shadow-DOM scrollbars match
@@ -150,8 +150,8 @@ fluent-text-area:focus-visible::part(root) {
     but whose bottom 1px is a bright --neutral-stroke, e.g.:
 
         background-image:
-            linear-gradient(#323045, #323045),                                  <- interior fill
-            linear-gradient(#373549 calc(100% - 1px), #918F9F calc(100% - 1px)); <- bottom line only
+            linear-gradient(#333333, #333333),                                  <- interior fill
+            linear-gradient(#373737 calc(100% - 1px), #8D8D8D calc(100% - 1px)); <- bottom line only
 
     Because only the bottom edge is drawn in a contrasting color, the field reads as if it has a
     heavy asymmetric bottom border. It is not a real border/box-shadow/::after, which is why it can
@@ -341,16 +341,18 @@ fluent-combobox:focus-visible::part(control) {
 [data-theme="dark"] {
     --scrollbar-color: #9F9F9F;
     /* Quiet, tint-free neutral thumb on dark: a semi-transparent white so the scrollbar reads as a
-       subtle overlay that recedes into the surface rather than a bright violet element (see :root). */
+       subtle overlay that recedes into the surface rather than a bright element competing with the
+       content (mirrors the light-theme neutral thumb). */
     --scrollbar-thumb-color: rgba(255, 255, 255, 0.20);
     --scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.34);
     --log-critical: #493634;
     --log-error: #493634;
     --log-warning: #3F3A2B;
-    /* Subtext grey lifted from the stock #8D8D8D. The violet neutral retint raised the luminance of
-       the body/panel surfaces (neutral-layer-2 #262439, neutral-layer-1 #323045), which dropped the
-       original grey to ~4.5:1 on the body and below AA on elevated panels. #9E9E9E restores a
-       comfortable >=4.5:1 (WCAG AA) for dimmed text (e.g. trace ids, subtext) across both surfaces. */
+    /* Subtext grey lifted from the stock #8D8D8D. Our neutral ramp base is a brighter mid-grey than
+       Fluent's default, which raises the luminance of the body/panel surfaces (neutral-layer-2 #272727,
+       neutral-layer-1 #333333) and dropped the original grey to ~4.5:1 on the body and below AA on
+       elevated panels. #9E9E9E restores a comfortable >=4.5:1 (WCAG AA) for dimmed text (e.g. trace ids,
+       subtext) across both surfaces. */
     --foreground-subtext-rest: #9E9E9E;
     --foreground-subtext-hover: #A1A1A1;
     --foreground-settings-text: #A8A8A8;
@@ -358,28 +360,27 @@ fluent-combobox:focus-visible::part(control) {
     --error-ui-accent-foreground-color: #512bd4;
     --reconnection-ui-bg: #D6D6D6;
     --error-counter-badge-foreground-color: #ffffff;
-    /* Keycap fill lifted well above the dialog/body/layer-1 surfaces. The old --fill-color (#323045)
-       was nearly identical to the dialog surface (#322E50, rgb 50,46,80), so shortcut caps in the
-       Help dialog were effectively invisible. This violet-tinted grey (same ~247° hue) sits a clear
-       step lighter than every dark surface a cap can land on. */
-    --kbd-background-color: #47436A;
-    /* Dialogs and the right-hand flyout panels (settings cog, notifications, help, AI agents) render
-       as fluent-dialog. A flat neutral grey (#272727) reads as a muddy brown next to the violet-tinted
-       neutral ramp (body #262439, layer-1 #323045), so tint these one step lighter than the body in the
-       same hue (~247°) - the panels still stand out as floating surfaces but stay on-theme. */
-    --dialog-background-color: #322E50;
-    --dialog-border-color: #4A4672;
+    /* Keycap fill lifted well above the dialog/body/layer-1 surfaces so shortcut caps in the Help
+       dialog stay visible. A neutral grey a clear step lighter than every dark surface a cap can land
+       on (dialog #333333, body #272727, layer-1 #333333). */
+    --kbd-background-color: #494949;
+    /* Dialogs and the right-hand flyout panels (settings cog, notifications, help, AI agents) render as
+       fluent-dialog. Keep them a neutral grey one step lighter than the body (#272727) so each panel
+       reads as an elevated floating surface; the brand purple shows through the accent controls inside
+       (primary button, links) rather than the panel fill. */
+    --dialog-background-color: #333333;
+    --dialog-border-color: #4c4c4c;
     /* Tamed keyboard focus ring: a mid periwinkle-violet in place of the near-white --accent-fill-rest
        (#e5bfff). It still clears the WCAG 2.4.11 3:1 non-text contrast minimum for focus indicators
-       (~4.8:1 against the panel #322E50, ~6:1 against the input well #262439) but reads as a calm accent
+       (~4.8:1 against the panel #333333, ~5.7:1 against the input well #272727) but reads as a calm accent
        edge instead of a stark white box. */
     --dash-focus-ring-color: #a98eff;
     /* Message bar surfaces derive from the shared --aspire-status-* seeds (tokens.css).
-       Dark theme: a restrained tint of the seed over the on-theme violet neutral layer
-       replaces the old near-black / over-saturated floods (#3F1011, #411200, #052505),
-       while the border stays the full vivid seed for a crisp intent edge. Info is a
-       gentle neutral lift over the same layer - the old flat #141414 read as a black
-       hole against the violet ramp (body #262439, layer-1 #323045). */
+       Dark theme: a restrained tint of the seed over the neutral layer replaces the old
+       near-black / over-saturated floods (#3F1011, #411200, #052505), while the border stays
+       the full vivid seed for a crisp intent edge. Info is a gentle neutral lift over the same
+       layer - the old flat #141414 read as a black hole against the elevated grey ramp
+       (body #272727, layer-1 #333333). */
     --messagebar-success-background-color: color-mix(in srgb, var(--aspire-status-success) 18%, var(--neutral-layer-1));
     --messagebar-success-border-color: var(--aspire-status-success);
     --messagebar-error-background-color: color-mix(in srgb, var(--aspire-status-error) 18%, var(--neutral-layer-1));
@@ -390,13 +391,13 @@ fluent-combobox:focus-visible::part(control) {
     --messagebar-info-border-color: var(--neutral-stroke-rest);
     /* See the light-theme note above: pin the page-theme ink so bar text/title/link inherit a
        readable foreground instead of the provider's inverted (here: dark) neutral-foreground.
-       Dark theme: a soft violet-tinted off-white reads AA+ on the restrained dark intent tints. */
-    --messagebar-foreground-color: #e3e1e6;
+       Dark theme: a neutral off-white reads AA+ on the restrained dark intent tints. */
+    --messagebar-foreground-color: #e5e5e5;
     /* One step up from the near-black --neutral-layer-4 (#0a081e). Layer 3 (#1a172d) still reads as a
        distinct code surface against the dialog/panel elevation without looking like a black hole. Light
        theme pins this same dark value so code blocks look identical across themes. */
     --codeblock-background-color: var(--neutral-layer-3);
-    /* Borderless in both themes: the dark block self-defines against the dialog surface (violet here,
+    /* Borderless in both themes: the dark block self-defines against the dialog surface (grey here,
        white in light theme). */
     --codeblock-border-color: transparent;
     /* Header strip a hair lighter than the body so the language/copy row is gently set off from the code,
@@ -409,11 +410,11 @@ fluent-combobox:focus-visible::part(control) {
     /* overrides of default fluentui-blazor styling */
     --error: #E10B11 !important;
     color-scheme: dark;
-    /* Resource detail (property grid) panel. A flat grey (#333333) reads as muddy next to the
-       violet-tinted neutral ramp, so use the retinted neutral-layer-1 (#323045) - one step lighter
-       than the violet body (neutral-layer-2), so the panel still reads as an elevated surface. */
+    /* Resource detail (property grid) panel uses neutral-layer-1 (#333333) - one step lighter than the
+       body (neutral-layer-2 #272727) so the panel still reads as an elevated surface. The GenAI sub-panel
+       sits one step lighter again. */
     --property-grid-background-color: var(--neutral-layer-1);
-    --property-grid-genai-dialog-background-color: #3A3654;
+    --property-grid-genai-dialog-background-color: #3b3b3b;
     /* highlight JS theme variables */
     --hljs-default: #f8f8f2;
     --hljs-comment: #d4d0ab;
@@ -463,13 +464,12 @@ fluent-combobox:focus-visible::part(control) {
 }
 
 /* The body background is painted by Fluent from --fill-color, which setFillColor() (app-theme.js)
-   pins to a neutralLayerL2 recipe value that evaluates to a flat grey (#272727). Unlike the
-   --neutral-layer-* custom properties, that recipe value does NOT pick up our violet neutral
-   retint, so the flat grey shows through every transparent surface (page base, resource
-   detail-panel toolbar) and reads as muddy next to the violet ramp. Pin the app base to the
-   retinted violet --neutral-layer-2 so the whole shell is cohesive; cards/panels use the lighter
-   --neutral-layer-1 and still layer on top. !important is required to beat Fluent's later base
-   sheet and the inline --fill-color binding on body. Works in both themes (token is theme-aware). */
+   pins to a neutralLayerL2 recipe value that evaluates to a flat grey (#272727). That recipe value
+   can drift a hair from the --neutral-layer-* custom properties that cards/panels layer against, and
+   it shows through every transparent surface (page base, resource detail-panel toolbar). Pin the app
+   base directly to --neutral-layer-2 (#272727) so the whole shell stays cohesive; cards/panels use the
+   lighter --neutral-layer-1 (#333333) and still layer on top. !important is required to beat Fluent's
+   later base sheet and the inline --fill-color binding on body. Works in both themes (token is theme-aware). */
 body {
     background-color: var(--neutral-layer-2) !important;
 }
@@ -878,14 +878,14 @@ fluent-dialog td[cell-type=columnheader] fluent-button[appearance=stealth]:not(:
 /* =========================================================================================
    Flyout panel / dialog polish (Settings, Notifications, Add filter, ...)
    -----------------------------------------------------------------------------------------
-   The right-hand flyout panels render as fluent-dialog with --dialog-background-color (#322E50 on
+   The right-hand flyout panels render as fluent-dialog with --dialog-background-color (#333333 on
    dark) - a surface that is actually LIGHTER than the page body. That inverts the usual page
    relationship (where inputs sit a step lighter than the body), so the default control fills blend
    into the panel and the primary action falls back to FAST's pale-lavender accent. The rules below
    restore clear surface separation and a strong primary action, scoped to the panels.
    ========================================================================================= */
 
-/* Inputs on the panel surface: sink the well to the darker --neutral-layer-2 (#262439) so each field
+/* Inputs on the panel surface: sink the well to the darker --neutral-layer-2 (#272727) so each field
    reads as a distinct inset against the lighter panel instead of melting into it. Dark theme only -
    the light-theme panel is white and already separates a light-grey field. */
 [data-theme="dark"] fluent-dialog fluent-text-field::part(root),
@@ -899,7 +899,7 @@ fluent-dialog td[cell-type=columnheader] fluent-button[appearance=stealth]:not(:
 }
 
 /* Primary action buttons on DARK theme: a soft LIGHT-purple fill with a dark-violet label, so the
-   primary action reads as a bright, inviting chip against the dark violet chrome. FAST's stock dark
+   primary action reads as a bright, inviting chip against the dark chrome. FAST's stock dark
    accent recipe is a near-white lavender (looks washed-out/disabled) and the brand-violet + white
    treatment we used before read heavy; a light-purple fill + dark text is the requested look. The fill
    and label are mixed from the brand seed (--accent-base-color #512bd4) so they track the theme: ~30%

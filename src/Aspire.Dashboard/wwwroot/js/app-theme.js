@@ -195,29 +195,28 @@ function setFillColor() {
 }
 
 /**
- * Gives the neutral (gray) ramp a subtle cool-violet undertone so surfaces feel related to the
- * .NET brand instead of reading as a flat, drab neutral gray - while staying tasteful.
+ * Sets the base of the neutral (gray) ramp. We keep it a TRUE neutral gray so the surfaces stay
+ * quiet and the .NET brand purple comes through only in accents - buttons, links, selected nav,
+ * focus rings, highlights and the accent scrollbar - rather than tinting every panel.
  *
- * This is applied to BOTH themes on purpose (applyTheme calls it unconditionally): in dark mode
- * it makes the UI read as richer and more "uplifting"; in light mode it lends the same faint
- * brand-aligned warmth. The saturation is low enough (~8%, see below) that surfaces still read as
- * neutral gray in either theme - the tint is felt, not seen.
+ * An earlier revision gave the ramp a faint cool-violet undertone; maintainer review found the dark
+ * surfaces read as too purple (especially dialogs), so the tint was removed. The gray is
+ * lightness-matched to that earlier base (#7D7D7D vs the former #7D7A8E) so the whole layer ramp keeps
+ * the elevation and contrast it was tuned for - only the hue changes.
  *
- * The swatch passed here is the MID-POINT of the ramp; Fluent regenerates the entire
- * neutral palette (every surface layer, stroke and neutral fill) from it, so the tint
- * stays cohesive across the whole app instead of being applied patchily per-element.
- * The hue (~250deg) is aligned with the .NET purple accent (#512BD4, ~258deg) at a very
- * low saturation (~8%) so surfaces feel related to the brand without looking coloured.
+ * Applied to BOTH themes (applyTheme calls it unconditionally). The swatch passed here is the
+ * MID-POINT of the ramp; Fluent regenerates the entire neutral palette (every surface layer, stroke
+ * and neutral fill) from it, so the ramp stays cohesive instead of being set patchily per-element.
  *
  * This mirrors setAccentColor(): we set the palette's default from a base swatch via
  * PaletteRGB.from(). (Fluent also exports an updateNeutralBaseColor() helper, but it
  * expects a hex *string* and throws on a SwatchRGB, so we use the token API directly.)
  */
 function setNeutralBaseColor() {
-    const baseColor = { // #7D7A8E - a low-saturation violet-gray
+    const baseColor = { // #7D7D7D - a true neutral gray (lightness-matched to the former #7D7A8E)
         r: 0x7D / 255.0,
-        g: 0x7A / 255.0,
-        b: 0x8E / 255.0
+        g: 0x7D / 255.0,
+        b: 0x7D / 255.0
     };
 
     neutralPalette.withDefault(PaletteRGB.from(SwatchRGB.create(baseColor.r, baseColor.g, baseColor.b)));
@@ -230,7 +229,7 @@ function setNeutralBaseColor() {
 function applyTheme(theme) {
     setBaseLayerLuminance(theme);
     setAccentColor();
-    // Retint the neutral ramp before deriving the fill color, since the body fill is taken
+    // Reset the neutral ramp base before deriving the fill color, since the body fill is taken
     // from neutralLayerL2 (which is generated from the neutral palette we're adjusting here).
     setNeutralBaseColor();
     setFillColor();
