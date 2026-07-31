@@ -77,8 +77,9 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         var runId = $"{startedAt:yyyyMMddTHHmmssfffZ}";
         PersistenceMode = options.Value.Data.PersistenceMode;
 
-        // Persistent run directories should be located under a directory scoped to the current user. Do not set Unix modes here;
-        // rely on the AppHost-managed data root's inherited permissions for the database, WAL, and shared-memory files.
+        // Persistent data can contain environment variables, telemetry, and console logs. Restrict the
+        // application directory so the database, WAL, shared-memory, and metadata files aren't exposed
+        // to other local users even when the data root was created with a permissive umask.
         switch (PersistenceMode)
         {
             case DashboardPersistenceMode.None:
@@ -90,6 +91,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
                 break;
             case DashboardPersistenceMode.Run:
                 var applicationDirectory = GetApplicationDirectory(options.Value.Data.Directory, applicationName);
+                DirectoryHelper.CreateWithOwnerOnlyPermissions(applicationDirectory);
                 _runsDirectory = Path.Combine(applicationDirectory, "runs");
                 RunDirectory = Path.Combine(_runsDirectory, runId);
                 DatabasePath = Path.Combine(RunDirectory, DatabaseFileName);
@@ -102,7 +104,7 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
             case DashboardPersistenceMode.Resume:
                 RunDirectory = GetApplicationDirectory(options.Value.Data.Directory, applicationName);
                 DatabasePath = Path.Combine(RunDirectory, DatabaseFileName);
-                Directory.CreateDirectory(RunDirectory);
+                DirectoryHelper.CreateWithOwnerOnlyPermissions(RunDirectory);
                 var resumeRunLock = OpenRequiredRunLock(
                     RunDirectory,
                     $"Dashboard data for application '{applicationName}' is already in use by another dashboard process. Database path: '{DatabasePath}'.");

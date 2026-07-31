@@ -92,6 +92,8 @@ The standalone `aspire dashboard run` command accepts `--application-name` and `
 
 When no data directory is configured, persistent modes use the `dashboard` directory under `ASPIRE_HOME`, whose default is the current user's `.aspire` directory. The configured directory must be scoped to and protected for the current user.
 
+On Unix, the per-application directory beneath the data root is created with owner-only (`0700`) permissions. Existing application directories are also restricted to that mode before persistent data is accessed. On Windows, the directory is created without Unix permission flags and uses the inherited ACL.
+
 ## Storage layout
 
 Persistent data is partitioned by application. The application directory name contains a readable prefix and a stable hash:

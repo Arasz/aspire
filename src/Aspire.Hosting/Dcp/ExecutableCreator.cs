@@ -11,6 +11,7 @@ using System.Text;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Dcp.Model;
 using Aspire.Hosting.Utils;
+using Aspire.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -571,14 +572,7 @@ internal sealed class ExecutableCreator : IObjectCreator<Executable, EmptyCreati
                 cancellationToken
             ).ConfigureAwait(false);
 
-            if (OperatingSystem.IsWindows())
-            {
-                Directory.CreateDirectory(baseServerAuthOutputPath);
-            }
-            else
-            {
-                Directory.CreateDirectory(baseServerAuthOutputPath, UnixFileMode.UserExecute | UnixFileMode.UserWrite | UnixFileMode.UserRead);
-            }
+            DirectoryHelper.CreateWithOwnerOnlyPermissions(baseServerAuthOutputPath);
 
             File.WriteAllText(Path.Join(baseServerAuthOutputPath, $"{thumbprint}.crt"), publicCertificatePem);
 

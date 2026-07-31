@@ -51,6 +51,32 @@ public sealed class DashboardDataSourceTests(ITestOutputHelper testOutputHelper)
         Assert.Equal(expectedDirectory, DashboardRunStore.GetApplicationDirectory(dataRoot: null, "My Dashboard"));
     }
 
+    [Theory]
+    [InlineData(DashboardPersistenceMode.Run)]
+    [InlineData(DashboardPersistenceMode.Resume)]
+    public void PersistentApplicationDirectory_HasOwnerOnlyPermissionsOnUnix(DashboardPersistenceMode persistenceMode)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var workspace = TemporaryWorkspace.Create(testOutputHelper);
+        var applicationDirectory = DashboardRunStore.GetApplicationDirectory(workspace.Path, "My Dashboard");
+        Directory.CreateDirectory(applicationDirectory);
+        File.SetUnixFileMode(
+            applicationDirectory,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        using var runStore = CreateRunStore(CreateOptions(workspace, "My Dashboard", persistenceMode));
+
+        Assert.Equal(
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+            File.GetUnixFileMode(applicationDirectory));
+    }
+
     [Fact]
     public void RunId_IsUtcTimestampWithMillisecondPrecision()
     {
