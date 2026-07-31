@@ -59,7 +59,7 @@ public class ContainerResourceFailureLoggingTests(ITestOutputHelper testOutputHe
         }
 
         var logLines = GetLogLines(logCollector);
-        Assert.Contains(logLines, x => x.Contains("Error response from daemon"));
+        Assert.Contains(logLines, ContainerRuntimeLogPatterns.IsImagePullFailure);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class ContainerResourceFailureLoggingTests(ITestOutputHelper testOutputHe
         }
 
         var logLines = GetLogLines(logCollector);
-        Assert.Contains(logLines, x => x.Contains("Error response from daemon"));
+        Assert.Contains(logLines, ContainerRuntimeLogPatterns.IsImagePullFailure);
     }
 
     [Fact]

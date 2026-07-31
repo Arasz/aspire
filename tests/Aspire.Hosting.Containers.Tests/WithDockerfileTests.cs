@@ -81,8 +81,8 @@ public class WithDockerfileTests(ITestOutputHelper testOutputHelper)
         var collector = app.Services.GetFakeLogCollector();
         var logs = collector.GetSnapshot();
 
-        // Just looking for a common message in Docker build output.
-        Assert.Contains(logs, log => log.Message.Contains("load build definition from Dockerfile"));
+        // Just looking for a build progress message, which Docker and Podman word differently.
+        Assert.Contains(logs, log => ContainerRuntimeLogPatterns.IsBuildProgress(log.Message));
 
         await app.StopAsync();
     }
