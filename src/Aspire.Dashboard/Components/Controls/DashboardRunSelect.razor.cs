@@ -6,12 +6,15 @@ using Aspire.Dashboard.Utils;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Localization;
 using Microsoft.FluentUI.AspNetCore.Components;
+using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 using LayoutResources = Aspire.Dashboard.Resources.Layout;
 
 namespace Aspire.Dashboard.Components.Controls;
 
 public partial class DashboardRunSelect : ComponentBase
 {
+    private static readonly Icon s_checkmarkIcon = new Icons.Regular.Size16.Checkmark();
+
     private readonly List<MenuButtonItem> _menuItems = [];
     private string? _previousSelectedRunId;
     private string RunSelectTitle => Loc[nameof(LayoutResources.DashboardRunSelectTitle)];
@@ -60,8 +63,9 @@ public partial class DashboardRunSelect : ComponentBase
             _menuItems.Add(new MenuButtonItem
             {
                 Text = FormatRunOption(run),
-                Role = MenuItemRole.MenuItemCheckbox,
+                Role = MenuItemRole.MenuItemRadio,
                 Checked = string.Equals(run.RunId, SelectedRunId, StringComparison.Ordinal),
+                Icon = s_checkmarkIcon,
                 OnClick = () => SelectedRunIdChanged.InvokeAsync(run.IsCurrent ? null : run.RunId)
             });
 

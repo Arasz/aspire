@@ -21,6 +21,7 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.FluentUI.AspNetCore.Components.Components.Tooltip;
 using Microsoft.JSInterop;
 using Xunit;
+using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 
 namespace Aspire.Dashboard.Components.Tests.Layout;
 
@@ -370,26 +371,28 @@ public partial class MainLayoutTests : DashboardTestContext
             item =>
             {
                 Assert.Equal("Live run", item.Text);
-                Assert.Equal(MenuItemRole.MenuItemCheckbox, item.Role);
+                Assert.Equal(MenuItemRole.MenuItemRadio, item.Role);
                 Assert.True(item.Checked);
-                Assert.Null(item.Icon);
+                Assert.IsType<Icons.Regular.Size16.Checkmark>(item.Icon);
             },
             item => Assert.True(item.IsDivider),
             item =>
             {
                 Assert.Equal(expectedHistoricalRunText, item.Text);
-                Assert.Equal(MenuItemRole.MenuItemCheckbox, item.Role);
+                Assert.Equal(MenuItemRole.MenuItemRadio, item.Role);
                 Assert.False(item.Checked);
-                Assert.Null(item.Icon);
+                Assert.IsType<Icons.Regular.Size16.Checkmark>(item.Icon);
             });
 
         var menuItems = runSelect.WaitForElements("fluent-menu-item");
         Assert.Single(runSelect.FindAll("fluent-divider"));
         Assert.Empty(menuItems[0].QuerySelectorAll("span[slot='start']"));
         Assert.Empty(menuItems[1].QuerySelectorAll("span[slot='start']"));
-        Assert.Equal("menuitemcheckbox", menuItems[0].GetAttribute("role"));
+        Assert.Single(menuItems[0].QuerySelectorAll("[slot='radio-indicator']"));
+        Assert.Single(menuItems[1].QuerySelectorAll("[slot='radio-indicator']"));
+        Assert.Equal("menuitemradio", menuItems[0].GetAttribute("role"));
         Assert.True(menuItems[0].HasAttribute("checked"));
-        Assert.Equal("menuitemcheckbox", menuItems[1].GetAttribute("role"));
+        Assert.Equal("menuitemradio", menuItems[1].GetAttribute("role"));
         Assert.False(menuItems[1].HasAttribute("checked"));
         menuItems[1].Click();
 
@@ -417,13 +420,13 @@ public partial class MainLayoutTests : DashboardTestContext
             item =>
             {
                 Assert.False(item.Checked);
-                Assert.Null(item.Icon);
+                Assert.IsType<Icons.Regular.Size16.Checkmark>(item.Icon);
             },
             item => Assert.True(item.IsDivider),
             item =>
             {
                 Assert.True(item.Checked);
-                Assert.Null(item.Icon);
+                Assert.IsType<Icons.Regular.Size16.Checkmark>(item.Icon);
             });
         menuItems = runSelect.WaitForElements("fluent-menu-item");
         Assert.Single(runSelect.FindAll("fluent-divider"));
