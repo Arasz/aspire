@@ -250,20 +250,21 @@ fluent-combobox:focus-visible::part(control) {
        provider does not redefine, so it inherits down to the message/title/link correctly.
        Light theme: near-black ink reads AA+ on the faint near-white intent washes. */
     --messagebar-foreground-color: #242424;
-    /* Light theme code surface. It must NOT derive from the neutral ramp: our neutral ramp is
-       intentionally violet-tinted for the app chrome, so a code bg mixed from --neutral-fill-hover
-       (#fcfafd) came out faintly lavender (rgb 232,230,233 - blue > green) AND, at only ~1.24:1 against
-       the white dialog surface, barely separated from it. Pin an explicit neutral grey that is a)
-       tint-free (R=G=B) and b) a deliberate step below the white modal, then pair it with the
-       --codeblock-border-color below so the block reads as a clearly recessed, delineated surface. Kept
-       light enough that the a11y-tuned --hljs-* syntax colors still clear WCAG AA (>= 4.5:1) against it;
-       guarded by the CodeblockContrast a11y test. */
-    --codeblock-background-color: #e4e4e4;
-    --codeblock-border-color: #cfcfcf;
-    /* Header strip (language label + copy button) sits a subtle, tint-free step darker than the body so
-       the code block reads as one cohesive recessed surface with a quiet header, rather than the body and
-       header being two unrelated greys (the old --neutral-fill-hover header looked disconnected). */
-    --codeblock-header-background-color: #d8d8d8;
+    /* Light theme code surface. Code blocks render as a DARK "terminal" surface in BOTH themes (see the
+       matching dark-theme block below) rather than a light grey. On the white dialog/modal a light grey
+       barely separated from the surface (~1.27:1) and read as muddy; a dark block instead gives strong,
+       unambiguous contrast against the white modal and a clear "this is code" identity. The syntax colors
+       further down are therefore the light-on-dark --hljs-* palette shared with dark theme. Guarded by the
+       CodeblockContrast a11y test. */
+    --codeblock-background-color: #1a172d;
+    /* No border needed: the dark block self-defines against the white modal. Transparent keeps it clean
+       (this token is also consumed by the text/JSON visualizer's .log-overflow surface). */
+    --codeblock-border-color: transparent;
+    /* Header strip (language label + copy button) a subtle step lighter than the body so the row is
+       gently set off from the code while reading as one cohesive block. */
+    --codeblock-header-background-color: color-mix(in srgb, var(--codeblock-background-color), #fff 5%);
+    /* Light label / copy-icon ink for the dark header, shared by both themes. */
+    --codeblock-header-foreground-color: #c9c6d6;
     --table-header-border-color: var(--neutral-stroke-rest);
     --table-body-border-color: #f2f2f2;
     --layout-toolbar-padding: calc(var(--design-unit) * 1.5px);
@@ -285,20 +286,17 @@ fluent-combobox:focus-visible::part(control) {
     --datagrid-hover-color: var(--neutral-layer-2-hover);
     --property-grid-background-color: #fbfbfb;
     --property-grid-genai-dialog-background-color: #fbfbfb;
-    /* highlight.js (@ericwbailey a11y-light) syntax colors. The upstream palette is engineered for
-       WCAG AA (>= 4.5:1) on a WHITE code background, but our light codeblock surface is a neutral grey
-       (--codeblock-background-color above = #e4e4e4 / rgb(228,228,228)), which dropped several tokens
-       under 4.5:1. These are darkened just enough to clear AA against that grey (measured 4.58-6.28:1)
-       while preserving each token's hue. Guarded by the CodeblockContrast a11y test.
-       default (#545454, 5.96:1) and keyword (#7928a1, 6.28:1) have the most headroom. */
-    --hljs-default: #545454;
-    --hljs-comment: #656565;
-    --hljs-variable: #c71b16;
-    --hljs-literal: #985300;
-    --hljs-attribute: #985300;
-    --hljs-string: #007600;
-    --hljs-section: #006d91;
-    --hljs-keyword: #7928a1;
+    /* highlight.js syntax colors. Code blocks are a DARK surface in light theme too (see
+       --codeblock-background-color above), so light theme uses the SAME light-on-dark palette as dark
+       theme - one code appearance across both themes. Guarded by the CodeblockContrast a11y test. */
+    --hljs-default: #f8f8f2;
+    --hljs-comment: #d4d0ab;
+    --hljs-variable: #ffa07a;
+    --hljs-literal: #f5ab35;
+    --hljs-attribute: gold;
+    --hljs-string: #abe338;
+    --hljs-section: #00e0e0;
+    --hljs-keyword: #dcc6e0;
     /* geni visualizer */
     --main-container-background-color: #f7f7f7;
     --main-sidebar-background-color: #f7f7f7;
@@ -395,14 +393,17 @@ fluent-combobox:focus-visible::part(control) {
        Dark theme: a soft violet-tinted off-white reads AA+ on the restrained dark intent tints. */
     --messagebar-foreground-color: #e3e1e6;
     /* One step up from the near-black --neutral-layer-4 (#0a081e). Layer 3 (#1a172d) still reads as a
-       distinct code surface against the dialog/panel elevation without looking like a black hole. */
+       distinct code surface against the dialog/panel elevation without looking like a black hole. Light
+       theme pins this same dark value so code blocks look identical across themes. */
     --codeblock-background-color: var(--neutral-layer-3);
-    /* Dark code blocks are already a darker inset sitting on the lighter dialog surface, so they read
-       as distinct without help. Keep them borderless (the border below is a light-theme-only affordance). */
+    /* Borderless in both themes: the dark block self-defines against the dialog surface (violet here,
+       white in light theme). */
     --codeblock-border-color: transparent;
     /* Header strip a hair lighter than the body so the language/copy row is gently set off from the code,
        replacing the previous jarring mid-grey (--neutral-fill-hover) that read as disconnected from it. */
     --codeblock-header-background-color: color-mix(in srgb, var(--codeblock-background-color), #fff 5%);
+    /* Light label / copy-icon ink for the dark header, shared by both themes. */
+    --codeblock-header-foreground-color: #c9c6d6;
     --table-header-border-color: var(--neutral-stroke-rest);
     --table-body-border-color: #474747;
     /* overrides of default fluentui-blazor styling */
@@ -693,11 +694,16 @@ h1 {
    them a real button silhouette by coloring that existing border slot with the neutral control stroke,
    matching the adjacent fluent-search `outline` field and the fluent-selects on the same toolbar. This
    is intentionally scoped to the page toolbars (`.main-toolbar` on the log/trace/metric subpages and
-   `.resource-tabs-toolbar` on Resources) so the appbar / top-nav icons stay borderless as requested.
-   Accent-filled buttons (the active filter state) already read as buttons via their fill, so they are
-   excluded here to avoid an outline-on-fill clash. */
+   `.resource-tabs-toolbar` on Resources) plus the detail-flyout filter toolbar
+   (`.details-container fluent-toolbar`, the span/log details search + options row) so its options icon
+   reads as a button against its own search field, the same way the page-toolbar options icon does. The
+   flyout *header* buttons (panel-resize / Close) are deliberately excluded - they live in the header,
+   not a fluent-toolbar - so that dialog chrome stays borderless. The appbar / top-nav icons also stay
+   borderless as requested. Accent-filled buttons (the active filter state) already read as buttons via
+   their fill, so they are excluded here to avoid an outline-on-fill clash. */
 .main-toolbar fluent-button:not([appearance="accent"])::part(control),
-.resource-tabs-toolbar fluent-button:not([appearance="accent"])::part(control) {
+.resource-tabs-toolbar fluent-button:not([appearance="accent"])::part(control),
+.details-container fluent-toolbar fluent-button:not([appearance="accent"])::part(control) {
     border-color: var(--neutral-stroke-rest);
 }
 
@@ -1708,14 +1714,15 @@ fluent-switch.table-switch::part(label) {
 }
 
 /* The text/JSON visualizer renders its content in a `.log-overflow` panel that has no background of
-   its own, so it blended into the dialog surface. Give it a distinct, slightly darker code surface
-   (scoped to the dialog so the full-page console viewer keeps its own black theme). */
+   its own, so it blended into the dialog surface. Give it the same dark terminal code surface as
+   markdown code blocks (scoped to the dialog so the full-page console viewer keeps its own black theme).
+   In BOTH themes this is a dark surface, so pin the light default ink for plain (non-highlighted) text;
+   highlight.js token spans override per token, matching the markdown code block treatment. */
 .text-visualizer-container .log-overflow {
     background-color: var(--codeblock-background-color);
-    /* A subtle border delineates the code surface from the dialog. On light theme the fill is only a
-       hair darker than the white modal, so the border (not the fill) is what makes the block read as a
-       clearly separated, recessed panel; on dark theme --codeblock-border-color is transparent so this
-       is a no-op there. box-sizing keeps the added 1px inside the width:100% panel (no layout shift). */
+    color: var(--hljs-default);
+    /* --codeblock-border-color is transparent in both themes (the dark block self-defines against the
+       dialog surface); box-sizing keeps any future 1px inside the width:100% panel (no layout shift). */
     border: 1px solid var(--codeblock-border-color);
     box-sizing: border-box;
     /* Fluent's --control-corner-radius is a UNITLESS number (e.g. "6"), so `border-radius: var(...)`

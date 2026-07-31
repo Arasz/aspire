@@ -29,7 +29,7 @@
 }
 
 .markdown-container .code-block {
-    border: 1px solid var(--neutral-stroke-rest);
+    border: 1px solid var(--codeblock-border-color);
     background-color: var(--codeblock-background-color);
     border-radius: .375rem;
     position: relative;
@@ -37,7 +37,7 @@
 
 .markdown-container .code-title {
     display: flex;
-    color: var(--foreground-settings-text);
+    color: var(--codeblock-header-foreground-color);
     background-color: var(--codeblock-header-background-color);
     padding-left: 14px;
     padding-right: 14px;
@@ -94,22 +94,41 @@
     border-radius: unset;
 }
 
+/* Code text sits on the dark terminal surface in BOTH themes, so pin the light default ink here rather
+   than relying on the .hljs class: plain / unhighlighted code (e.g. a bash command) has no .hljs color
+   and would otherwise inherit the theme body text - dark in light theme - and vanish on the dark block.
+   highlight.js token spans (.hljs-keyword, .hljs-string, ...) still override this per token. */
+.markdown-container .code-block code {
+    color: var(--hljs-default);
+}
+
 .markdown-container .code-copy-button {
     border: 0;
     border-radius: 5px;
     background-color: var(--codeblock-header-background-color);
+    color: var(--codeblock-header-foreground-color);
     width: 28px;
     height: 28px;
 }
 
 .markdown-container .code-copy-button:hover {
-    background-color: var(--neutral-fill-active);
+    /* The header is a dark surface in both themes, so lift toward white on hover instead of the light
+       --neutral-fill-active, which flashed pale on the dark header. */
+    background-color: color-mix(in srgb, var(--codeblock-header-background-color), #ffffff 12%);
 }
 
 .markdown-container .copy-icon,
 .markdown-container .checkmark-icon {
     display: inline-flex;
     vertical-align: sub;
+}
+
+/* The copy / checkmark SVGs carry an inline fill="var(--accent-fill-rest)" (accent violet), which reads
+   muddy and low-contrast (violet-on-violet, ~2.7:1) on the dark terminal header. A CSS `fill` beats the
+   SVG presentation attribute, so pin them to the button's light header ink (currentColor) for a clean,
+   high-contrast icon that matches the language label. */
+.markdown-container .code-copy-button svg {
+    fill: currentColor;
 }
 
 .markdown-container strong {
