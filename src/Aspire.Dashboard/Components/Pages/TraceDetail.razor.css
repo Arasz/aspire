@@ -44,8 +44,20 @@
     border-bottom: calc(var(--stroke-width) * 1px) solid var(--neutral-stroke-divider-rest);
 }
 
-::deep .fluent-data-grid-row[row-type='sticky-header'] th:first-child {
-    margin-left: 5px;
+/*
+    FluentDataGrid applies default inline padding to header cells (measured 16px on
+    the Resource column, 8px on Ticks/Actions), but this component zeroes the body
+    cells' padding (see the `td` rule below). Without matching the two, every header
+    label sits inset from its column - most visibly the "Resource" label and the
+    time-tick labels, which then no longer line up with the waterfall gridlines in
+    the rows below. Zero the header cells' inline padding so each label is flush
+    with its column like the body (this also drops a stray 5px nudge that used to be
+    on the first cell). `padding-inline` (the logical property) plus a
+    higher-specificity selector and !important are all required to override
+    FluentUI's own `padding-inline-start` rule on the cell.
+*/
+::deep .trace-view-grid .fluent-data-grid-row[row-type='sticky-header'] th {
+    padding-inline: 0 !important;
 }
 
 ::deep .trace-view-grid .fluent-data-grid-row {
@@ -217,6 +229,15 @@
     grid-area: filters;
     display: flex;
     align-items: center;
+    /*
+        These controls live in a plain flex row (not a FluentToolbar), so the
+        `slot="end"` DesktopToolbarDividers between them collapse to a zero-size box
+        and contribute no spacing, leaving the filter, span-type select, "no
+        filters" text and the two buttons butted together. Match the 8px
+        inter-control gap that FluentToolbar applies via its shadow `::part(end)` so
+        this toolbar is spaced like every other one.
+    */
+    gap: var(--aspire-space-sm);
 }
 
 ::deep .span-button-container {
