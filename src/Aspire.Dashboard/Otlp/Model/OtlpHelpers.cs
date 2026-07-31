@@ -58,6 +58,11 @@ public static partial class OtlpHelpers
 
     internal static void ValidateHistogramDataPoint(HistogramDataPoint point)
     {
+        if (!double.IsFinite(point.Sum))
+        {
+            throw new InvalidOperationException("Histogram data point sum must be finite.");
+        }
+
         if (point.BucketCounts.Count > 0 && point.ExplicitBounds.Count == 0)
         {
             throw new InvalidOperationException("Histogram data point has bucket counts without any explicit bounds.");

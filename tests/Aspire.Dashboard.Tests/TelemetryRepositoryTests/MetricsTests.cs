@@ -1216,6 +1216,46 @@ public abstract class MetricsTests : TelemetryRepositoryTestBase
         }
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public async Task AddMetrics_NonFiniteHistogramSumRejected(double sum)
+    {
+        using var repositoryContext = await CreateRepositoryAsync();
+        var metric = CreateHistogramMetric(metricName: "test", startTime: s_testTime.AddMinutes(1));
+        metric.Histogram.DataPoints[0].Sum = sum;
+        var addContext = new AddContext();
+
+        await repositoryContext.Repository.AsWriter().AddMetricsAsync(addContext, new RepeatedField<ResourceMetrics>
+        {
+            new ResourceMetrics
+            {
+                Resource = CreateResource(),
+                ScopeMetrics =
+                {
+                    new ScopeMetrics
+                    {
+                        Scope = CreateScope(name: "test-meter"),
+                        Metrics = { metric }
+                    }
+                }
+            }
+        });
+
+        Assert.Equal(0, addContext.SuccessCount);
+        Assert.Equal(1, addContext.FailureCount);
+        var instrument = repositoryContext.Repository.GetInstrument(new GetInstrumentRequest
+        {
+            ResourceKey = new ResourceKey("TestService", "TestId"),
+            MeterName = "test-meter",
+            InstrumentName = "test",
+            StartTime = DateTime.MinValue,
+            EndTime = DateTime.MaxValue
+        });
+        Assert.All(instrument!.Dimensions, dimension => Assert.Empty(dimension.Values));
+    }
+
     [Fact]
     public async Task AddMetrics_NonFiniteExemplarsIgnoredWithoutRejectingPoint()
     {
