@@ -2080,21 +2080,21 @@ public static class JavaScriptHostingExtensions
         var workingDirectory = Path.GetFullPath(resource.WorkingDirectory);
 
         return builder.WithDebugSupport(
-            (mode, ct) =>
+            mode =>
             {
                 // Compute at run time so the launch config reflects the final annotation state
                 var hasRunScript = resource.TryGetLastAnnotation<JavaScriptRunScriptAnnotation>(out _);
                 var hasPackageManager = resource.TryGetLastAnnotation<JavaScriptPackageManagerAnnotation>(out var pmAnnotation);
                 var isPackageManagerScript = hasRunScript && hasPackageManager;
 
-                return Task.FromResult(new JavaScriptLaunchConfiguration(launchConfigType)
+                return new JavaScriptLaunchConfiguration(launchConfigType)
                 {
                     ScriptPath = Path.GetFullPath(scriptPath, workingDirectory),
                     Mode = mode,
                     RuntimeExecutable = isPackageManagerScript ? pmAnnotation!.ExecutableName : launchConfigType,
                     LaunchMethod = isPackageManagerScript ? JavaScriptLaunchConfiguration.LaunchMethodPackageManager : JavaScriptLaunchConfiguration.LaunchMethodDirect,
                     WorkingDirectory = workingDirectory
-                });
+                };
             },
             launchConfigType);
     }
@@ -2115,7 +2115,7 @@ public static class JavaScriptHostingExtensions
         }
 
         return builder.WithDebugSupport(
-            (mode, ct) =>
+            mode =>
             {
                 // Fall back to "npm" (the default for these frameworks) if no package manager annotation is present.
                 var packageManager = "npm";
@@ -2124,14 +2124,14 @@ public static class JavaScriptHostingExtensions
                     packageManager = pmAnnotation.ExecutableName;
                 }
 
-                return Task.FromResult(new JavaScriptLaunchConfiguration("node")
+                return new JavaScriptLaunchConfiguration("node")
                 {
                     ScriptPath = string.Empty,
                     Mode = mode,
                     RuntimeExecutable = packageManager,
                     LaunchMethod = JavaScriptLaunchConfiguration.LaunchMethodPackageManager,
                     WorkingDirectory = workingDirectory
-                });
+                };
             },
             "node");
     }
@@ -2184,7 +2184,7 @@ public static class JavaScriptHostingExtensions
             .WaitFor(builder)
             .ExcludeFromManifest()
             .WithDebugSupport(
-                (mode, ct) =>
+                mode =>
                 {
                     // Resolve endpoint at run time so dynamically added endpoints are reflected
                     EndpointAnnotation? endpointAnnotation = null;
@@ -2202,13 +2202,13 @@ public static class JavaScriptHostingExtensions
 
                     var endpointReference = parentResource.GetEndpoint(endpointAnnotation.Name);
 
-                    return Task.FromResult(new BrowserLaunchConfiguration
+                    return new BrowserLaunchConfiguration
                     {
                         Mode = mode,
                         Url = endpointReference.Url,
                         WebRoot = parentResource.WorkingDirectory,
                         Browser = browser
-                    });
+                    };
                 },
                 BrowserCapability);
 

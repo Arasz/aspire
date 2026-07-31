@@ -58,12 +58,12 @@ public class DebugSupportExtensionsTests
         // owns the whole configuration, so its output is returned (and sent) verbatim.
         using var builder = TestDistributedApplicationBuilder.Create();
         var project = builder.AddProject<Projects.ServiceA>("proj", launchProfileName: "http")
-                             .WithDebugSupport((mode, ct) => Task.FromResult(new ProjectLaunchConfiguration
+                             .WithDebugSupport(mode => new ProjectLaunchConfiguration
                              {
                                  Mode = mode,
                                  ProjectPath = "custom-path",
                                  LaunchProfile = "https"
-                             }), KnownLaunchConfigurationTypes.Project);
+                             }, KnownLaunchConfigurationTypes.Project);
 
         var launchConfiguration = Assert.IsType<ProjectLaunchConfiguration>(await project.Resource.CreateLaunchConfigurationAsync(ExecutableLaunchMode.NoDebug));
 
@@ -77,7 +77,7 @@ public class DebugSupportExtensionsTests
     {
         using var builder = TestDistributedApplicationBuilder.Create();
         var executable = builder.AddExecutable("app", "go", ".")
-                                .WithDebugSupport((mode, ct) => Task.FromResult(new TestGoLaunchConfiguration { Mode = mode, Package = "./cmd/api" }), "go");
+                                .WithDebugSupport(mode => new TestGoLaunchConfiguration { Mode = mode, Package = "./cmd/api" }, "go");
 
         var launchConfiguration = Assert.IsType<TestGoLaunchConfiguration>(await executable.Resource.CreateLaunchConfigurationAsync(ExecutableLaunchMode.NoDebug));
 
@@ -142,7 +142,7 @@ public class DebugSupportExtensionsTests
         // support without carrying metadata fails with a clear message rather than a sequence error.
         using var builder = TestDistributedApplicationBuilder.Create();
         var executable = builder.AddExecutable("app", "dotnet", ".");
-        executable.WithDebugSupport((mode, ct) => Task.FromResult(ProjectLaunchConfigurationFactory.Create(executable.Resource, mode)), KnownLaunchConfigurationTypes.Project);
+        executable.WithDebugSupport(mode => ProjectLaunchConfigurationFactory.Create(executable.Resource, mode), KnownLaunchConfigurationTypes.Project);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => executable.Resource.CreateLaunchConfigurationAsync(ExecutableLaunchMode.Debug));
 
