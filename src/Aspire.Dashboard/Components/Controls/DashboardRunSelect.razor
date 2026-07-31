@@ -1,6 +1,7 @@
 <div class="application-run-select">
     <AspireMenuButton Text="@SelectedRunText"
-                      Title="@RunSelectAriaLabel"
+                      Title="@RunSelectTitle"
+                      aria-label="@RunSelectAccessibleLabel"
                       IconStart="@(new Icons.Filled.Size12.Circle())"
                       IconStartClass="application-run-status"
                       IconStartColor="@(SelectedRunIsCurrent ? Color.Success : Color.Warning)"

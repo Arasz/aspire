@@ -21,7 +21,6 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.FluentUI.AspNetCore.Components.Components.Tooltip;
 using Microsoft.JSInterop;
 using Xunit;
-using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 
 namespace Aspire.Dashboard.Components.Tests.Layout;
 
@@ -359,6 +358,9 @@ public partial class MainLayoutTests : DashboardTestContext
         Assert.Equal("Live run", menuButton.Instance.Text);
         Assert.True(menuButton.Instance.HideIcon);
         Assert.Empty(menuButton.Instance.Items);
+        var menuButtonElement = runSelect.Find("fluent-button");
+        var menuButtonId = menuButtonElement.Id;
+        Assert.Equal("Select run: Live run", menuButtonElement.GetAttribute("aria-label"));
 
         var navigationOccurred = false;
         Services.GetRequiredService<NavigationManager>().LocationChanged += (_, _) => navigationOccurred = true;
@@ -368,19 +370,27 @@ public partial class MainLayoutTests : DashboardTestContext
             item =>
             {
                 Assert.Equal("Live run", item.Text);
-                Assert.IsType<Icons.Regular.Size16.Checkmark>(item.Icon);
+                Assert.Equal(MenuItemRole.MenuItemCheckbox, item.Role);
+                Assert.True(item.Checked);
+                Assert.Null(item.Icon);
             },
             item => Assert.True(item.IsDivider),
             item =>
             {
                 Assert.Equal(expectedHistoricalRunText, item.Text);
+                Assert.Equal(MenuItemRole.MenuItemCheckbox, item.Role);
+                Assert.False(item.Checked);
                 Assert.Null(item.Icon);
             });
 
         var menuItems = runSelect.WaitForElements("fluent-menu-item");
         Assert.Single(runSelect.FindAll("fluent-divider"));
-        Assert.Single(menuItems[0].QuerySelectorAll("span[slot='start']"));
+        Assert.Empty(menuItems[0].QuerySelectorAll("span[slot='start']"));
         Assert.Empty(menuItems[1].QuerySelectorAll("span[slot='start']"));
+        Assert.Equal("menuitemcheckbox", menuItems[0].GetAttribute("role"));
+        Assert.True(menuItems[0].HasAttribute("checked"));
+        Assert.Equal("menuitemcheckbox", menuItems[1].GetAttribute("role"));
+        Assert.False(menuItems[1].HasAttribute("checked"));
         menuItems[1].Click();
 
         Assert.Equal("historical", storedRunId);
@@ -395,17 +405,30 @@ public partial class MainLayoutTests : DashboardTestContext
         Assert.Contains("fill: var(--warning)", statusIcon.GetAttribute("style"), StringComparison.Ordinal);
         Assert.Equal(expectedHistoricalRunText, menuButton.Instance.Text);
         Assert.Empty(menuButton.Instance.Items);
+        Assert.Equal(menuButtonId, runSelect.Find("fluent-button").Id);
+        Assert.Equal($"Select run: {expectedHistoricalRunText}", runSelect.Find("fluent-button").GetAttribute("aria-label"));
+        Assert.Contains(
+            JSInterop.Invocations,
+            invocation => invocation.Identifier == "focusElement" && invocation.Arguments.Single() is string id && id == menuButtonId);
 
         runSelect.Find("fluent-button").Click();
         Assert.Collection(
             menuButton.Instance.Items,
-            item => Assert.Null(item.Icon),
+            item =>
+            {
+                Assert.False(item.Checked);
+                Assert.Null(item.Icon);
+            },
             item => Assert.True(item.IsDivider),
-            item => Assert.IsType<Icons.Regular.Size16.Checkmark>(item.Icon));
+            item =>
+            {
+                Assert.True(item.Checked);
+                Assert.Null(item.Icon);
+            });
         menuItems = runSelect.WaitForElements("fluent-menu-item");
         Assert.Single(runSelect.FindAll("fluent-divider"));
         Assert.Empty(menuItems[0].QuerySelectorAll("span[slot='start']"));
-        Assert.Single(menuItems[1].QuerySelectorAll("span[slot='start']"));
+        Assert.Empty(menuItems[1].QuerySelectorAll("span[slot='start']"));
         menuItems[0].Click();
 
         Assert.Equal(string.Empty, storedRunId);

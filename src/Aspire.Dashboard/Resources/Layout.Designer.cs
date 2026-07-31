@@ -63,9 +63,18 @@ namespace Aspire.Dashboard.Resources {
         /// <summary>
         ///   Looks up a localized string similar to Select dashboard run.
         /// </summary>
-        public static string DashboardRunSelectAriaLabel {
+        public static string DashboardRunSelectTitle {
             get {
-                return ResourceManager.GetString("DashboardRunSelectAriaLabel", resourceCulture);
+                return ResourceManager.GetString("DashboardRunSelectTitle", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Select run: {0}.
+        /// </summary>
+        public static string DashboardRunSelectAccessibleLabel {
+            get {
+                return ResourceManager.GetString("DashboardRunSelectAccessibleLabel", resourceCulture);
             }
         }
 

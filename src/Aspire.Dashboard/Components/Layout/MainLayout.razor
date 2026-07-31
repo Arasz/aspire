@@ -23,8 +23,7 @@
             @if (RunStore.SupportsRunSelection)
             {
                 var selectedRun = RunSelection.SelectedRun;
-                <DashboardRunSelect @key="selectedRun.RunId"
-                                    SelectedRunId="@selectedRun.RunId"
+                <DashboardRunSelect SelectedRunId="@selectedRun.RunId"
                                     SelectedRunIsCurrent="@selectedRun.IsCurrent"
                                     SelectedRunStartedAtUtc="@selectedRun.StartedAtUtc"
                                     SelectedRunIdChanged="@SwitchDashboardRunAsync" />
@@ -71,8 +70,7 @@
             @if (RunStore.SupportsRunSelection)
             {
                 var selectedRun = RunSelection.SelectedRun;
-                <DashboardRunSelect @key="selectedRun.RunId"
-                                    SelectedRunId="@selectedRun.RunId"
+                <DashboardRunSelect SelectedRunId="@selectedRun.RunId"
                                     SelectedRunIsCurrent="@selectedRun.IsCurrent"
                                     SelectedRunStartedAtUtc="@selectedRun.StartedAtUtc"
                                     SelectedRunIdChanged="@SwitchDashboardRunAsync" />
