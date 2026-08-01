@@ -52,12 +52,15 @@ public class AspireMenuTests : DashboardTestContext
         var menu = menuHost.FindComponent<FluentMenu>().Instance;
         await menuHost.InvokeAsync(() => menuService.RefreshMenuAsync(menu.Id!, isOpen: true));
 
-        provider.WaitForElement("fluent-button[aria-label='Pin run']").Click();
+        var pinButton = provider.WaitForElement("fluent-button[aria-label='Pin run']");
+        Assert.Equal("false", pinButton.GetAttribute("aria-pressed"));
+        pinButton.Click();
 
         provider.WaitForAssertion(() =>
         {
             Assert.Single(provider.FindComponents<FluentMenu>());
-            Assert.NotNull(provider.Find("fluent-button[aria-label='Unpin run']"));
+            var unpinButton = provider.Find("fluent-button[aria-label='Unpin run']");
+            Assert.Equal("true", unpinButton.GetAttribute("aria-pressed"));
         });
     }
 

@@ -36,7 +36,7 @@
                                       Appearance="Appearance.Stealth"
                                       Title="@item.SecondaryActionAriaLabel"
                                       AriaLabel="@item.SecondaryActionAriaLabel"
-                                      aria-pressed="@item.IsSecondaryActionSelected"
+                                      aria-pressed="@(item.IsSecondaryActionSelected ? "true" : "false")"
                                       @onclick="() => HandleSecondaryActionClicked(item)">
                             <FluentIcon Value="@item.SecondaryActionIcon" Width="16px" />
                         </FluentButton>

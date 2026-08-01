@@ -364,7 +364,9 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         foreach (var directory in expiredRunDirectories)
         {
             using var runLock = TryOpenRunLock(directory);
-            if (runLock is null)
+            // Pinning can happen after the candidate list is created. Recheck while holding the same lock used by
+            // SetRunPinned so a successful pin always completes before pruning decides whether to delete the run.
+            if (runLock is null || IsPinnedRunDirectory(directory))
             {
                 continue;
             }
@@ -392,6 +394,8 @@ internal sealed class DashboardRunStore : IDashboardRunStore, IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
+            // Run metadata is written locally by DashboardRunStore and is assumed to be reliable during normal usage.
+            // Treat unreadable metadata as unpinned so incomplete or abandoned run directories can still be pruned.
             return false;
         }
     }
