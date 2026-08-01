@@ -31,7 +31,7 @@
                 }
                 @if (item.SecondaryActionIcon is not null)
                 {
-                    <span slot="end" @onclick:stopPropagation="true">
+                    <span slot="end" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         <FluentButton Class="@($"aspire-menu-secondary-action{(item.IsSecondaryActionSelected ? " selected" : null)}")"
                                       Appearance="Appearance.Stealth"
                                       Title="@item.SecondaryActionAriaLabel"
